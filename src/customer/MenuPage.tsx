@@ -24,8 +24,8 @@ export function MenuPage({
   onOpenQRCodes?: () => void;
   onOpenAdmin?: () => void;
 }) {
-  const { cart, lines, totalItems, subtotal, increment, decrement, clear } = useCart();
   const { categories, menuItems, loading } = useMenuData();
+  const { cart, lines, totalItems, subtotal, increment, decrement, clear } = useCart(menuItems);
   const [activeCategoryId, setActiveCategoryId] = useState<string>("");
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep | "none">("none");
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | undefined>();
@@ -178,7 +178,7 @@ export function MenuPage({
       )}
 
 
-      <div className="flex flex-col gap-1 pb-3 pt-1 text-center text-[11px] text-slate-400">
+      <div className="flex flex-col gap-1 pb-28 pt-1 text-center text-[11px] text-slate-400">
         <div>
           Testing another table?{" "}
           <button onClick={onSwitchTable} className="font-semibold text-blueink underline">

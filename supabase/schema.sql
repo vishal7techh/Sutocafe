@@ -1,10 +1,8 @@
--- ===================================================
--- SUTO CAFE - Supabase PostgreSQL Database Schema
--- Run this script in your Supabase SQL Editor
--- ===================================================
+-- ============================================================
+-- SUTO CAFE - SUPABASE POSTGRESQL DATABASE SETUP & SEED
+-- ============================================================
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 1. CATEGORIES TABLE
 CREATE TABLE IF NOT EXISTS public.categories (
@@ -44,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   customer_name TEXT NOT NULL,
   customer_phone TEXT NOT NULL,
   total_amount DECIMAL(10, 2) NOT NULL,
-  status TEXT DEFAULT 'New', -- 'New', 'Accepted', 'Preparing', 'Ready', 'Completed', 'Cancelled'
+  status TEXT DEFAULT 'New',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -59,61 +57,160 @@ CREATE TABLE IF NOT EXISTS public.order_items (
   subtotal DECIMAL(10, 2) NOT NULL
 );
 
--- ===================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- ===================================================
-
+-- 6. ENABLE ROW LEVEL SECURITY
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 
--- Public Read Policies
+-- 7. REMOVE OLD POLICIES
+DROP POLICY IF EXISTS "Allow public read access to categories" ON public.categories;
+DROP POLICY IF EXISTS "Allow public read access to menu items" ON public.menu_items;
+DROP POLICY IF EXISTS "Allow public read access to tables" ON public.tables;
+DROP POLICY IF EXISTS "Allow public read access to orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow public read access to order items" ON public.order_items;
+DROP POLICY IF EXISTS "Allow public insert of orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow public insert of order items" ON public.order_items;
+DROP POLICY IF EXISTS "Allow update tables status" ON public.tables;
+DROP POLICY IF EXISTS "Allow update orders status" ON public.orders;
+
+-- 8. PUBLIC READ POLICIES
 CREATE POLICY "Allow public read access to categories" ON public.categories FOR SELECT USING (true);
-CREATE POLICY "Allow public read access to menu items" ON public.categories FOR SELECT USING (true);
+CREATE POLICY "Allow public read access to menu items" ON public.menu_items FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to tables" ON public.tables FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to orders" ON public.orders FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to order items" ON public.order_items FOR SELECT USING (true);
 
--- Public Write Policies (for customer checkout & order creation)
+-- 9. PUBLIC INSERT POLICIES
 CREATE POLICY "Allow public insert of orders" ON public.orders FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public insert of order items" ON public.order_items FOR INSERT WITH CHECK (true);
 
--- Public Update Policies (for status changes & admin management)
-CREATE POLICY "Allow update orders status" ON public.orders FOR UPDATE USING (true);
+-- 10. UPDATE POLICIES
+CREATE POLICY "Allow update orders status" ON public.orders FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update tables status" ON public.tables FOR UPDATE USING (true) WITH CHECK (true);
 
--- ===================================================
--- INITIAL SEED DATA FOR SUTO CAFE
--- ===================================================
-
--- Insert Categories
-INSERT INTO public.categories (id, name, icon, display_order) VALUES
-  ('c1000000-0000-0000-0000-000000000001', 'Burgers', '🍔', 1),
-  ('c2000000-0000-0000-0000-000000000002', 'Pizza', '🍕', 2),
-  ('c3000000-0000-0000-0000-000000000003', 'Snacks', '🍟', 3),
-  ('c4000000-0000-0000-0000-000000000004', 'Beverages', '☕', 4)
-ON CONFLICT (name) DO NOTHING;
-
--- Insert 10 Tables
-INSERT INTO public.tables (table_number) VALUES
-  (1), (2), (3), (4), (5), (6), (7), (8), (9), (10)
+-- 11. TABLE SEED DATA
+INSERT INTO public.tables (table_number, status) VALUES
+  (1, 'Available'), (2, 'Available'), (3, 'Available'), (4, 'Available'), (5, 'Available'),
+  (6, 'Available'), (7, 'Available'), (8, 'Available'), (9, 'Available'), (10, 'Available')
 ON CONFLICT (table_number) DO NOTHING;
 
--- Insert Menu Items
-INSERT INTO public.menu_items (category_id, name, description, price, is_veg, is_available, image_url) VALUES
-  ('c1000000-0000-0000-0000-000000000001', 'Veg Burger', 'Fresh vegetable patty with lettuce, tomatoes, and mayonnaise', 120.00, true, true, 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=500&auto=format&fit=crop'),
-  ('c1000000-0000-0000-0000-000000000001', 'Cheese Burger', 'Crispy veg patty loaded with melted cheddar cheese slice', 150.00, true, true, 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop'),
-  ('c1000000-0000-0000-0000-000000000001', 'Paneer Burger', 'Spicy grilled paneer patty topped with mint sauce and veggies', 170.00, true, true, 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500&auto=format&fit=crop'),
-  
-  ('c2000000-0000-0000-0000-000000000002', 'Margherita Pizza', 'Classic cheese pizza topped with mozzarella and basil', 220.00, true, true, 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=500&auto=format&fit=crop'),
-  ('c2000000-0000-0000-0000-000000000002', 'Paneer Tikka Pizza', 'Tandoori marinated paneer, capsicum, onions & mozzarella', 280.00, true, true, 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop'),
-  ('c2000000-0000-0000-0000-000000000002', 'Veg Supreme Pizza', 'Loaded with olives, bell peppers, corn, mushrooms & cheese', 320.00, true, true, 'https://images.unsplash.com/photo-1534308983496-4fabb1a015ee?w=500&auto=format&fit=crop'),
-  
-  ('c3000000-0000-0000-0000-000000000003', 'French Fries', 'Golden salted crispy potato fries served with tomato ketchup', 120.00, true, true, 'https://images.unsplash.com/photo-1576107232684-1279f390859f?w=500&auto=format&fit=crop'),
-  ('c3000000-0000-0000-0000-000000000003', 'Peri Peri Fries', 'Spicy peri peri seasoned crispy fries with cheesy dip', 140.00, true, true, 'https://images.unsplash.com/photo-1630384060421-cb3e1e57631e?w=500&auto=format&fit=crop'),
-  ('c3000000-0000-0000-0000-000000000003', 'Garlic Bread Sticks', 'Warm oven-baked garlic bread topped with melted butter and herbs', 150.00, true, true, 'https://images.unsplash.com/photo-1573140247632-f8fd74997d5c?w=500&auto=format&fit=crop'),
-  
-  ('c4000000-0000-0000-0000-000000000004', 'Cold Coffee', 'Thick creamy blended cold coffee topped with chocolate syrup', 100.00, true, true, 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=500&auto=format&fit=crop'),
-  ('c4000000-0000-0000-0000-000000000004', 'Hot Cappuccino', 'Rich espresso with steamed milk foam and cinnamon powder', 90.00, true, true, 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=500&auto=format&fit=crop'),
-  ('c4000000-0000-0000-0000-000000000004', 'Masala Tea', 'Traditional Indian spiced tea infused with cardamom and ginger', 40.00, true, true, 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop');
+-- 12. CATEGORY & MENU SEED DATA (FULL SUTO CAFE MENU)
+DELETE FROM public.order_items;
+DELETE FROM public.menu_items;
+DELETE FROM public.categories;
+
+INSERT INTO public.categories (id, name, icon, display_order) VALUES
+  ('c0100000-0000-0000-0000-000000000001', 'Combos', '🎁', 1),
+  ('c0200000-0000-0000-0000-000000000002', 'Burger', '🍔', 2),
+  ('c0300000-0000-0000-0000-000000000003', 'Sandwich', '🥪', 3),
+  ('c0400000-0000-0000-0000-000000000004', 'Fries', '🍟', 4),
+  ('c0500000-0000-0000-0000-000000000005', 'Maggi', '🍜', 5),
+  ('c0600000-0000-0000-0000-000000000006', 'Pasta', '🍝', 6),
+  ('c0700000-0000-0000-0000-000000000007', 'Snacks', '🧀', 7),
+  ('c0800000-0000-0000-0000-000000000008', 'Espresso', '☕', 8),
+  ('c0900000-0000-0000-0000-000000000009', 'Cold Beverages', '🥤', 9),
+  ('c1000000-0000-0000-0000-000000000010', 'Milkshake', '🥛', 10),
+  ('c1100000-0000-0000-0000-000000000011', 'Tea', '🍵', 11),
+  ('c1200000-0000-0000-0000-000000000012', 'Mocktails', '🍹', 12),
+  ('c1300000-0000-0000-0000-000000000013', 'Waffle', '🧇', 13),
+  ('c1400000-0000-0000-0000-000000000014', 'Dessert', '🍰', 14);
+
+INSERT INTO public.menu_items (category_id, name, description, price, is_veg, is_available) VALUES
+  -- COMBOS
+  ('c0100000-0000-0000-0000-000000000001', 'Classic Combo', 'Classic Maggi + Hot Coffee', 199.00, true, true),
+  ('c0100000-0000-0000-0000-000000000001', 'Sandwich Combo', 'Veg Grilled Sandwich + Mocktail', 199.00, true, true),
+  ('c0100000-0000-0000-0000-000000000001', 'Pasta Combo', 'Pasta + Cold Coffee', 229.00, true, true),
+  ('c0100000-0000-0000-0000-000000000001', 'Suto Special Combo', 'Aloo Tikki Burger 1+1, Cold Coffee & French Fries', 239.00, true, true),
+
+  -- BURGER
+  ('c0200000-0000-0000-0000-000000000002', 'Aloo Tikki Burger', 'Crisp potato tikki patty with fresh veggies', 79.00, true, true),
+  ('c0200000-0000-0000-0000-000000000002', 'Veggie Delight Burger', 'Loaded vegetable patty, lettuce & sauces', 109.00, true, true),
+  ('c0200000-0000-0000-0000-000000000002', 'Cheese Burger', 'Classic veg patty burger with a melted cheese slice', 119.00, true, true),
+  ('c0200000-0000-0000-0000-000000000002', 'Mexican Burger', 'Spiced Mexican-style veg patty with jalapeños', 119.00, true, true),
+  ('c0200000-0000-0000-0000-000000000002', 'Cheese Slice (Add-On)', 'Extra melted cheese slice', 15.00, true, true),
+
+  -- SANDWICH
+  ('c0300000-0000-0000-0000-000000000003', 'Veg Grilled Sandwich', 'Grilled bread packed with mixed vegetables', 89.00, true, true),
+  ('c0300000-0000-0000-0000-000000000003', 'Masala Sandwich', 'Spiced potato masala filling, grilled', 109.00, true, true),
+  ('c0300000-0000-0000-0000-000000000003', 'Cheese Chutney Sandwich', 'Mint chutney and melted cheese', 109.00, true, true),
+  ('c0300000-0000-0000-0000-000000000003', 'Corn Cheese Sandwich', 'Sweet corn and cheese, grilled golden', 109.00, true, true),
+  ('c0300000-0000-0000-0000-000000000003', 'Vegetable Sandwich', 'Fresh mixed vegetables and butter', 119.00, true, true),
+
+  -- FRIES
+  ('c0400000-0000-0000-0000-000000000004', 'French Fries', 'Classic salted crispy fries', 89.00, true, true),
+  ('c0400000-0000-0000-0000-000000000004', 'Peri Peri French Fries', 'Tossed in tangy peri peri seasoning', 99.00, true, true),
+  ('c0400000-0000-0000-0000-000000000004', 'Tandoori Fries', 'Smoky tandoori-spiced fries', 109.00, true, true),
+  ('c0400000-0000-0000-0000-000000000004', 'Cheese Fries', 'Loaded with melted cheese', 109.00, true, true),
+  ('c0400000-0000-0000-0000-000000000004', 'Cheese & Jalapeno Dip (Add-On)', 'Creamy cheesy jalapeno dip', 15.00, true, true),
+
+  -- MAGGI
+  ('c0500000-0000-0000-0000-000000000005', 'Classic Maggi', 'The everyday favourite, simply made', 79.00, true, true),
+  ('c0500000-0000-0000-0000-000000000005', 'Double Masala Maggi', 'Extra masala for extra flavour', 89.00, true, true),
+  ('c0500000-0000-0000-0000-000000000005', 'Vegetable Maggi', 'Loaded with fresh chopped vegetables', 109.00, true, true),
+  ('c0500000-0000-0000-0000-000000000005', 'Cheese Maggi', 'Finished with a generous layer of cheese', 119.00, true, true),
+  ('c0500000-0000-0000-0000-000000000005', 'Pizza Style Maggi', 'Maggi topped pizza-style with cheese & herbs', 119.00, true, true),
+  ('c0500000-0000-0000-0000-000000000005', 'Paneer Cheese Maggi', 'Paneer cubes with melted cheese', 119.00, true, true),
+
+  -- PASTA
+  ('c0600000-0000-0000-0000-000000000006', 'Alfredo Pasta (White)', 'Creamy white sauce pasta', 179.00, true, true),
+  ('c0600000-0000-0000-0000-000000000006', 'Arrabbiata Pasta (Red)', 'Spicy tomato red sauce pasta', 179.00, true, true),
+  ('c0600000-0000-0000-0000-000000000006', 'Mix Sauce Pasta', 'A blend of red and white sauces', 179.00, true, true),
+
+  -- SNACKS
+  ('c0700000-0000-0000-0000-000000000007', 'Cheese Crispy Veg Finger', 'Crunchy veg fingers with a cheesy centre', 89.00, true, true),
+  ('c0700000-0000-0000-0000-000000000007', 'Veg Pizza Pocket', 'Pizza-filled crispy pocket', 89.00, true, true),
+  ('c0700000-0000-0000-0000-000000000007', 'Veg Potato Shot', 'Bite-sized crispy potato snack', 89.00, true, true),
+  ('c0700000-0000-0000-0000-000000000007', 'Butter Cheesy Corn', 'Buttered sweet corn with cheese', 119.00, true, true),
+
+  -- ESPRESSO
+  ('c0800000-0000-0000-0000-000000000008', 'Hot Coffee (Half)', 'Freshly brewed hot coffee (half size)', 49.00, true, true),
+  ('c0800000-0000-0000-0000-000000000008', 'Hot Coffee (Full)', 'Freshly brewed hot coffee (full size)', 89.00, true, true),
+  ('c0800000-0000-0000-0000-000000000008', 'Espresso', 'A classic single shot', 69.00, true, true),
+  ('c0800000-0000-0000-0000-000000000008', 'Americano', 'Espresso lengthened with hot water', 89.00, true, true),
+  ('c0800000-0000-0000-0000-000000000008', 'Iced Americano', 'Chilled espresso over ice', 109.00, true, true),
+  ('c0800000-0000-0000-0000-000000000008', 'Cappuccino', 'Espresso with steamed, frothed milk', 109.00, true, true),
+  ('c0800000-0000-0000-0000-000000000008', 'Mocha', 'Espresso with chocolate and steamed milk', 119.00, true, true),
+
+  -- COLD BEVERAGES
+  ('c0900000-0000-0000-0000-000000000009', 'Cold Coffee', 'Classic chilled cold coffee', 69.00, true, true),
+  ('c0900000-0000-0000-0000-000000000009', 'Strong Cold Coffee', 'Extra-strength cold coffee', 79.00, true, true),
+  ('c0900000-0000-0000-0000-000000000009', 'Thick Cold Coffee', 'Extra thick and creamy', 89.00, true, true),
+  ('c0900000-0000-0000-0000-000000000009', 'Chocolate Cold Coffee', 'Cold coffee with chocolate', 109.00, true, true),
+  ('c0900000-0000-0000-0000-000000000009', 'Oreo Cold Coffee', 'Blended with Oreo cookies', 109.00, true, true),
+  ('c0900000-0000-0000-0000-000000000009', 'Hot Chocolate', 'Rich and warm chocolate drink', 109.00, true, true),
+
+  -- MILKSHAKE
+  ('c1000000-0000-0000-0000-000000000010', 'Chocolate Shake', 'Thick chocolate milkshake', 149.00, true, true),
+  ('c1000000-0000-0000-0000-000000000010', 'Oreo Shake', 'Blended with Oreo cookies', 149.00, true, true),
+  ('c1000000-0000-0000-0000-000000000010', 'KitKat Shake', 'Blended with KitKat', 149.00, true, true),
+  ('c1000000-0000-0000-0000-000000000010', 'Brownie Shake', 'Loaded with brownie chunks', 149.00, true, true),
+  ('c1000000-0000-0000-0000-000000000010', 'Hazelnut Shake', 'Rich hazelnut flavour', 149.00, true, true),
+  ('c1000000-0000-0000-0000-000000000010', 'Strawberry Shake', 'Fresh strawberry milkshake', 149.00, true, true),
+  ('c1000000-0000-0000-0000-000000000010', 'Mango Shake', 'Fresh mango milkshake', 149.00, true, true),
+
+  -- TEA
+  ('c1100000-0000-0000-0000-000000000011', 'Tea', 'Classic Indian chai', 15.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Black Tea', 'No milk, just brewed tea', 15.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Lemon Tea', 'Brewed tea with a hint of lemon', 20.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Ginger Tea', 'Chai brewed with fresh ginger', 20.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Masala Tea', 'Chai with classic Indian spices', 20.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Elaichi Tea', 'Chai brewed with cardamom', 20.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Bread Butter', 'Toasted bread with butter', 20.00, true, true),
+  ('c1100000-0000-0000-0000-000000000011', 'Bun Maska', 'Soft bun with a generous butter spread', 25.00, true, true),
+
+  -- MOCKTAILS
+  ('c1200000-0000-0000-0000-000000000012', 'Masala Lemonade', 'Spiced fresh lemonade', 119.00, true, true),
+  ('c1200000-0000-0000-0000-000000000012', 'Mint Mojito', 'Refreshing mint and lime', 119.00, true, true),
+  ('c1200000-0000-0000-0000-000000000012', 'Kala Khatta', 'Tangy black-currant mocktail', 119.00, true, true),
+  ('c1200000-0000-0000-0000-000000000012', 'Blue Blast', 'Fruity blue curaçao-style mocktail', 119.00, true, true),
+  ('c1200000-0000-0000-0000-000000000012', 'Peach Mojito', 'Peach and mint, chilled', 119.00, true, true),
+
+  -- WAFFLE
+  ('c1300000-0000-0000-0000-000000000013', 'Vanilla Waffle', 'Warm Belgian waffle with vanilla', 199.00, true, true),
+  ('c1300000-0000-0000-0000-000000000013', 'Chocolate Waffle', 'Warm Belgian waffle with chocolate sauce', 199.00, true, true),
+
+  -- DESSERT
+  ('c1400000-0000-0000-0000-000000000014', 'Brownie Burst', 'Rich fudgy chocolate brownie', 89.00, true, true),
+  ('c1400000-0000-0000-0000-000000000014', 'Brownie Burst with Icecream', 'Warm brownie topped with ice cream', 119.00, true, true);

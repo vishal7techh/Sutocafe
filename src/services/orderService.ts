@@ -68,6 +68,12 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
       console.error("Failed to insert order items into Supabase:", itemsErr);
     }
 
+    // 3. Mark table status as 'Occupied' in Supabase tables
+    await supabase
+      .from("tables")
+      .update({ status: "Occupied" })
+      .eq("table_number", order.tableNumber);
+
     return true;
   } catch (err) {
     console.error("Exception saving order to Supabase:", err);
@@ -89,6 +95,30 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
     if (orderErr || !dbOrders) {
       console.warn("Supabase fetchOrders failed, using local fallback:", orderErr);
       return getLocalOrders();
+    }
+
+    // Sync table statuses in Supabase based on active orders
+    try {
+      const activeTableNumbers = new Set(
+        dbOrders
+          .filter((o) => ["New", "Accepted", "Preparing", "Ready"].includes(o.status))
+          .map((o) => o.table_number)
+      );
+
+      const { data: allTables } = await supabase.from("tables").select("table_number, status");
+      if (allTables) {
+        for (const t of allTables) {
+          const expectedStatus = activeTableNumbers.has(t.table_number) ? "Occupied" : "Available";
+          if (t.status !== expectedStatus) {
+            await supabase
+              .from("tables")
+              .update({ status: expectedStatus })
+              .eq("table_number", t.table_number);
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Could not sync table statuses:", syncErr);
     }
 
     return dbOrders.map((o) => ({
@@ -133,14 +163,34 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   }
 
   try {
-    const { error } = await supabase
+    // 1. Update order status in Supabase orders table
+    const { data: updatedOrders, error } = await supabase
       .from("orders")
       .update({ status })
-      .eq("order_number", orderId);
+      .eq("order_number", orderId)
+      .select("table_number");
 
     if (error) {
       console.error("Failed to update order status in Supabase:", error);
       return false;
+    }
+
+    const tableNum = updatedOrders && updatedOrders[0]?.table_number;
+    if (tableNum) {
+      // 2. Check if table has remaining active orders ('New', 'Accepted', 'Preparing', 'Ready')
+      const { data: activeOrders } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("table_number", tableNum)
+        .in("status", ["New", "Accepted", "Preparing", "Ready"]);
+
+      const tableStatus = activeOrders && activeOrders.length > 0 ? "Occupied" : "Available";
+
+      // 3. Update table status in tables table
+      await supabase
+        .from("tables")
+        .update({ status: tableStatus })
+        .eq("table_number", tableNum);
     }
 
     return true;

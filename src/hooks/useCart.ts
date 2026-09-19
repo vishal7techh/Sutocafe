@@ -15,7 +15,7 @@ function loadInitialCart(): CartState {
   }
 }
 
-export function useCart() {
+export function useCart(allAvailableItems: MenuItem[] = []) {
   const [cart, setCart] = useState<CartState>(loadInitialCart);
 
   useEffect(() => {
@@ -41,18 +41,22 @@ export function useCart() {
 
   const clear = useCallback(() => setCart({}), []);
 
-  const lines: CartLine[] = useMemo(
-    () =>
-      Object.entries(cart)
-        .filter(([, qty]) => qty > 0)
-        .map(([itemId, qty]) => {
-          const item = MENU_ITEMS.find((m) => m.id === itemId)!;
-          const lineTotal = item ? Math.round(item.price * qty * 100) / 100 : 0;
-          return { item, quantity: qty, lineTotal };
-        })
-        .filter((l) => Boolean(l.item)),
-    [cart]
-  );
+  const lines: CartLine[] = useMemo(() => {
+    const itemMap = new Map<string, MenuItem>();
+    // 1. Add static local menu items as base fallback
+    MENU_ITEMS.forEach((i) => itemMap.set(i.id, i));
+    // 2. Override/add dynamic menu items fetched from Supabase
+    allAvailableItems.forEach((i) => itemMap.set(i.id, i));
+
+    return Object.entries(cart)
+      .filter(([, qty]) => qty > 0)
+      .map(([itemId, qty]) => {
+        const item = itemMap.get(itemId);
+        const lineTotal = item ? Math.round(item.price * qty * 100) / 100 : 0;
+        return { item: item!, quantity: qty, lineTotal };
+      })
+      .filter((l) => Boolean(l.item));
+  }, [cart, allAvailableItems]);
 
   const totalItems = useMemo(
     () => lines.reduce((sum, l) => sum + l.quantity, 0),
@@ -63,6 +67,6 @@ export function useCart() {
     [lines]
   );
 
-
   return { cart, lines, totalItems, subtotal, increment, decrement, clear };
 }
+
