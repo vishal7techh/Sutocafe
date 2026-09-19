@@ -40,21 +40,33 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>("all");
 
-  const loadAllData = async () => {
-    setLoading(true);
-    const [fetchedOrders, fetchedItems, fetchedCats] = await Promise.all([
-      fetchOrders(),
-      fetchMenuItems(),
-      fetchCategories(),
-    ]);
-    setOrders(fetchedOrders);
-    setMenuItems(fetchedItems);
-    setCategories(fetchedCats);
-    setLoading(false);
+  const loadAllData = async (showLoadingSpinner = true) => {
+    if (showLoadingSpinner) setLoading(true);
+    try {
+      const [fetchedOrders, fetchedItems, fetchedCats] = await Promise.all([
+        fetchOrders(),
+        fetchMenuItems(),
+        fetchCategories(),
+      ]);
+      setOrders(fetchedOrders);
+      setMenuItems(fetchedItems);
+      setCategories(fetchedCats);
+    } catch (err) {
+      console.error("Failed loading admin data:", err);
+    } finally {
+      if (showLoadingSpinner) setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadAllData();
+    loadAllData(true);
+
+    // Auto-refresh orders every 4 seconds so live customer orders pop up immediately
+    const interval = setInterval(() => {
+      loadAllData(false);
+    }, 4000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
@@ -146,6 +158,10 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
             <span className="font-display text-xl font-bold text-white">{cafeConfig.name}</span>
             <span className="rounded-md bg-gold px-2 py-0.5 text-xs font-black text-navy uppercase">
               Admin
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-400/30">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              Live Sync Active
             </span>
           </div>
 

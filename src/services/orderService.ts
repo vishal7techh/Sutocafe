@@ -35,7 +35,7 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
 
   try {
     // 1. Insert main order record
-    const { data: orderRow, error: orderErr } = await supabase
+    const { data: orderRows, error: orderErr } = await supabase
       .from("orders")
       .insert({
         order_number: order.orderId,
@@ -45,17 +45,18 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
         total_amount: order.totalAmount,
         status: order.status || "New",
       })
-      .select("id")
-      .single();
+      .select("id");
 
-    if (orderErr || !orderRow) {
+    const orderRowId = orderRows?.[0]?.id;
+
+    if (orderErr || !orderRowId) {
       console.error("Failed to insert order into Supabase:", orderErr);
       return false;
     }
 
     // 2. Insert order items
     const itemsToInsert = order.lines.map((line) => ({
-      order_id: orderRow.id,
+      order_id: orderRowId,
       item_name: line.item.name,
       unit_price: line.item.price,
       quantity: line.quantity,
@@ -68,11 +69,15 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
       console.error("Failed to insert order items into Supabase:", itemsErr);
     }
 
-    // 3. Mark table status as 'Occupied' in Supabase tables
-    await supabase
-      .from("tables")
-      .update({ status: "Occupied" })
-      .eq("table_number", order.tableNumber);
+    // 3. Mark table status as 'Occupied' in Supabase tables (safe block)
+    try {
+      await supabase
+        .from("tables")
+        .update({ status: "Occupied" })
+        .eq("table_number", order.tableNumber);
+    } catch (tblErr) {
+      console.warn("Could not update table status in Supabase:", tblErr);
+    }
 
     return true;
   } catch (err) {
