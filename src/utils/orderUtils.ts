@@ -21,12 +21,11 @@ export function isValidCustomerName(name: string): boolean {
  * Generates a unique readable Order ID for SUTO CAFE.
  * Example: SC-20260918-001
  */
-let orderCounter = 1;
-
 export function generateOrderId(): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const numStr = String(orderCounter++).padStart(3, "0");
-  return `SC-${dateStr}-${numStr}`;
+  // Use timestamp milliseconds + random offset to guarantee uniqueness across all devices
+  const uniqueNum = String(Math.floor(1000 + (Date.now() % 8999) + Math.random() * 100));
+  return `SC-${dateStr}-${uniqueNum}`;
 }
 
 /**

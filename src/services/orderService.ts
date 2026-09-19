@@ -34,11 +34,13 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
   }
 
   try {
+    let orderNumberToInsert = order.orderId;
+
     // 1. Insert main order record
-    const { data: orderRows, error: orderErr } = await supabase
+    let { data: orderRows, error: orderErr } = await supabase
       .from("orders")
       .insert({
-        order_number: order.orderId,
+        order_number: orderNumberToInsert,
         table_number: order.tableNumber,
         customer_name: order.customer.name,
         customer_phone: order.customer.phone,
@@ -46,6 +48,24 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
         status: order.status || "New",
       })
       .select("id");
+
+    // If duplicate order_number key error (23505), append random suffix and retry
+    if (orderErr && (orderErr.code === "23505" || orderErr.message?.includes("unique constraint"))) {
+      orderNumberToInsert = `${order.orderId}-${Math.floor(100 + Math.random() * 900)}`;
+      const retry = await supabase
+        .from("orders")
+        .insert({
+          order_number: orderNumberToInsert,
+          table_number: order.tableNumber,
+          customer_name: order.customer.name,
+          customer_phone: order.customer.phone,
+          total_amount: order.totalAmount,
+          status: order.status || "New",
+        })
+        .select("id");
+      orderRows = retry.data;
+      orderErr = retry.error;
+    }
 
     const orderRowId = orderRows?.[0]?.id;
 
