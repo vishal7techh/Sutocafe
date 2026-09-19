@@ -118,7 +118,7 @@ export function QRCodesPage({ onBackToMenu }: Props) {
         </div>
 
         {/* QR Cards Grid */}
-        <div className="grid grid-cols-1 justify-items-center gap-8 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-2 print:gap-4 print:p-0">
+        <div className="grid grid-cols-1 justify-items-center gap-8 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 print:gap-x-1 print:gap-y-2 print:p-0 print:w-full">
           {displayedTables.map((tableNum) => (
             <TableQRCard
               key={tableNum}

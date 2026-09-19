@@ -20,6 +20,11 @@ body {
 
 /* Printable QR Card Styles */
 @media print {
+  @page {
+    margin: 6mm;
+    size: A4 portrait;
+  }
+
   body {
     background: white !important;
     color: black !important;
@@ -29,17 +34,22 @@ body {
     display: none !important;
   }
 
+  .print\:break-before-page {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
   .qr-card {
     box-shadow: none !important;
-    border: 2px solid #132043 !important;
+    border: 1.5px solid #132043 !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-bottom: 2rem !important;
+    margin-bottom: 0 !important;
   }
 
-  @page {
-    margin: 1cm;
-    size: auto;
+  /* Target QR Code SVG size in print */
+  .qr-card svg {
+    width: 90px !important;
+    height: 90px !important;
   }
 }
-

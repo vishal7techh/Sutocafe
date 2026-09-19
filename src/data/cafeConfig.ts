@@ -12,7 +12,7 @@ export const cafeConfig = {
   tagline: "Scan · Order · Enjoy",
   totalTables: 10,
   currencySymbol: "₹",
-  whatsAppNumber: import.meta.env.VITE_WHATSAPP_NUMBER || "917820841208",
+  whatsAppNumber: import.meta.env.VITE_WHATSAPP_NUMBER || "918080545648",
 
   theme: {
     navy: "#132043",

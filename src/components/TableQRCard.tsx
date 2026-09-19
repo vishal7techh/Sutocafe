@@ -28,9 +28,9 @@ export function TableQRCard({ tableNumber, baseUrl }: Props) {
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className={`flex flex-col items-center w-full ${tableNumber === 10 ? "print:break-before-page" : ""}`}>
       {/* Printable Card Container matching reference image styling */}
-      <div className="qr-card relative flex w-full max-w-[340px] flex-col items-center overflow-hidden rounded-3xl border-2 border-blue-900/10 bg-white p-6 shadow-xl print:m-0 print:w-full print:max-w-none print:break-inside-avoid print:shadow-none print:border-slate-300">
+      <div className="qr-card relative flex w-full max-w-[340px] flex-col items-center overflow-hidden rounded-3xl border-2 border-blue-900/10 bg-white p-6 shadow-xl print:m-0 print:w-full print:max-w-[205px] print:break-inside-avoid print:shadow-none print:border print:border-navy print:p-2 print:rounded-2xl">
         
         {/* Decorative corner accent shapes */}
         <div className="absolute top-0 left-0 h-14 w-14 rounded-br-full bg-blueink/10 print:hidden" />
@@ -39,29 +39,29 @@ export function TableQRCard({ tableNumber, baseUrl }: Props) {
         {/* Brand Header */}
         <div className="relative z-10 flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5">
-            <span className="font-display text-2xl font-black tracking-tight text-navy">
+            <span className="font-display text-2xl font-black tracking-tight text-navy print:text-xs">
               {cafeConfig.name}
             </span>
-            <span className="text-xl">☕</span>
+            <span className="text-xl print:text-xs">☕</span>
           </div>
-          <p className="text-[10px] font-bold tracking-widest uppercase text-blueink/80">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-blueink/80 print:text-[7px] print:tracking-tight">
             GOOD FOOD · GREAT VIBES
           </p>
         </div>
 
         {/* Headline */}
-        <div className="mt-4 text-center">
-          <h2 className="font-display text-xl font-black uppercase tracking-wide text-navy">
-            ORDER FROM <br />
-            <span className="text-blueink">YOUR TABLE</span>
+        <div className="mt-4 text-center print:mt-1">
+          <h2 className="font-display text-xl font-black uppercase tracking-wide text-navy print:text-[11px] print:leading-tight">
+            ORDER FROM <br className="print:hidden" />
+            <span className="text-blueink"> YOUR TABLE</span>
           </h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-500 print:text-[7.5px] print:mt-0">
             {cafeConfig.tagline}
           </p>
         </div>
 
         {/* QR Code Frame */}
-        <div className="relative my-5 flex items-center justify-center rounded-2xl border-4 border-blueink/15 bg-white p-4 shadow-inner">
+        <div className="relative my-5 flex items-center justify-center rounded-2xl border-4 border-blueink/15 bg-white p-4 shadow-inner print:my-1 print:p-1.5 print:border-2 print:rounded-xl">
           {/* SVG for sharp UI display */}
           <QRCodeSVG
             value={targetUrl}
@@ -92,18 +92,18 @@ export function TableQRCard({ tableNumber, baseUrl }: Props) {
         </div>
 
         {/* WhatsApp Badge */}
-        <div className="w-full rounded-xl bg-navy px-3 py-2.5 text-center text-white shadow-md">
-          <div className="flex items-center justify-center gap-1.5 text-xs font-bold">
+        <div className="w-full rounded-xl bg-navy px-3 py-2.5 text-center text-white shadow-md print:py-1 print:px-1 print:rounded-lg">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-bold print:text-[7.5px]">
             <span className="text-emerald-400">📱</span>
             <span>Scan to Order on WhatsApp</span>
           </div>
-          <p className="mt-0.5 text-[9.5px] font-medium opacity-80">
+          <p className="mt-0.5 text-[9.5px] font-medium opacity-80 print:hidden">
             No need to call — simply scan and send us your order!
           </p>
         </div>
 
         {/* Table Number Pill Badge */}
-        <div className="mt-4 inline-flex items-center justify-center rounded-full bg-blueink px-6 py-1.5 text-sm font-black tracking-wider text-white shadow-sm">
+        <div className="mt-4 inline-flex items-center justify-center rounded-full bg-blueink px-6 py-1.5 text-sm font-black tracking-wider text-white shadow-sm print:mt-1 print:px-2.5 print:py-0.5 print:text-[10px]">
           {tablePillText}
         </div>
       </div>
