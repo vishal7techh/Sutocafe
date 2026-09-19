@@ -92,9 +92,10 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
   }
 
   try {
+    // 1. Fetch orders directly without complex joins to prevent PostgREST relation errors
     const { data: dbOrders, error: orderErr } = await supabase
       .from("orders")
-      .select("*, order_items(*)")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (orderErr || !dbOrders) {
@@ -102,7 +103,26 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
       return getLocalOrders();
     }
 
-    // Sync table statuses in Supabase based on active orders
+    // 2. Fetch order items directly
+    const { data: dbItems, error: itemsErr } = await supabase
+      .from("order_items")
+      .select("*");
+
+    if (itemsErr) {
+      console.warn("Supabase fetch order items failed:", itemsErr);
+    }
+
+    // Map order items by order_id
+    const itemsByOrderId = new Map<string, any[]>();
+    if (dbItems) {
+      for (const item of dbItems) {
+        const list = itemsByOrderId.get(item.order_id) || [];
+        list.push(item);
+        itemsByOrderId.set(item.order_id, list);
+      }
+    }
+
+    // Sync table statuses in Supabase based on active orders (non-blocking)
     try {
       const activeTableNumbers = new Set(
         dbOrders
@@ -126,31 +146,42 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
       console.warn("Could not sync table statuses:", syncErr);
     }
 
-    return dbOrders.map((o) => ({
-      orderId: o.order_number,
-      tableNumber: o.table_number,
-      customer: {
-        name: o.customer_name,
-        phone: o.customer_phone,
-      },
-      lines: (o.order_items || []).map((i: any) => ({
-        item: {
-          id: i.id,
-          categoryId: "",
-          name: i.item_name,
-          description: "",
-          price: Number(i.unit_price),
-          isVeg: true,
-          isAvailable: true,
+    const supabaseOrders: OrderDetails[] = dbOrders.map((o) => {
+      const lineItems = itemsByOrderId.get(o.id) || [];
+      return {
+        orderId: o.order_number,
+        tableNumber: o.table_number,
+        customer: {
+          name: o.customer_name,
+          phone: o.customer_phone,
         },
-        quantity: i.quantity,
-        lineTotal: Number(i.subtotal),
-      })),
-      subtotal: Number(o.total_amount),
-      totalAmount: Number(o.total_amount),
-      orderTime: new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      status: o.status as OrderStatus,
-    }));
+        lines: lineItems.map((i: any) => ({
+          item: {
+            id: i.id,
+            categoryId: "",
+            name: i.item_name,
+            description: "",
+            price: Number(i.unit_price),
+            isVeg: true,
+            isAvailable: true,
+          },
+          quantity: i.quantity,
+          lineTotal: Number(i.subtotal),
+        })),
+        subtotal: Number(o.total_amount),
+        totalAmount: Number(o.total_amount),
+        orderTime: new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: (o.status || "New") as OrderStatus,
+      };
+    });
+
+    // Merge with local orders cache (deduplicating by orderId) so no orders are ever lost
+    const localOrders = getLocalOrders();
+    const orderMap = new Map<string, OrderDetails>();
+    localOrders.forEach((o) => orderMap.set(o.orderId, o));
+    supabaseOrders.forEach((o) => orderMap.set(o.orderId, o));
+
+    return Array.from(orderMap.values()).sort((a, b) => (b.orderId > a.orderId ? 1 : -1));
   } catch (err) {
     console.error("Exception fetching orders from Supabase:", err);
     return getLocalOrders();
@@ -192,10 +223,14 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
       const tableStatus = activeOrders && activeOrders.length > 0 ? "Occupied" : "Available";
 
       // 3. Update table status in tables table
-      await supabase
-        .from("tables")
-        .update({ status: tableStatus })
-        .eq("table_number", tableNum);
+      try {
+        await supabase
+          .from("tables")
+          .update({ status: tableStatus })
+          .eq("table_number", tableNum);
+      } catch {
+        // ignore table update error
+      }
     }
 
     return true;
@@ -204,3 +239,4 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
     return false;
   }
 }
+

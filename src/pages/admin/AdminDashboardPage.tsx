@@ -323,7 +323,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                 <div className="flex items-center justify-between">
                   <h2 className="font-display text-lg font-bold text-navy">Order Management</h2>
                   <button
-                    onClick={loadAllData}
+                    onClick={() => loadAllData(true)}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                   >
                     🔄 Refresh

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from "react";
-import type { CartState, CartLine } from "../types";
+import type { CartState, CartLine, MenuItem } from "../types";
 import { MENU_ITEMS } from "../data/menuData";
 
 const STORAGE_KEY = "suto-cafe-cart";
