@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-paper text-slate-900 font-body antialiased;
+}
+
+/* A single centered "phone" column — the app is mobile-first,
+   this just keeps it readable on wider screens too. */
+.app-shell {
+  @apply mx-auto min-h-screen w-full max-w-[480px] bg-paper shadow-[0_0_40px_rgba(0,0,0,0.06)];
+}
+
+/* Printable QR Card Styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .qr-card {
+    box-shadow: none !important;
+    border: 2px solid #132043 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 2rem !important;
+  }
+
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+}
+
