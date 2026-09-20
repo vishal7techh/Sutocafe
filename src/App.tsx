@@ -48,15 +48,7 @@ export default function App() {
 
   // Otherwise (no table QR scanned or /admin route), directly show Admin Login / Dashboard
   if (!authed) {
-    return (
-      <AdminLoginPage
-        onLoginSuccess={() => setAuthed(true)}
-        onBackToCustomerView={() => {
-          window.history.pushState({}, "", "/menu?table=1");
-          setView("menu");
-        }}
-      />
-    );
+    return <AdminLoginPage onLoginSuccess={() => setAuthed(true)} />;
   }
 
   return (

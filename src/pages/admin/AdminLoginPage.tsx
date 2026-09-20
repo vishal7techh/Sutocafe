@@ -4,10 +4,10 @@ import { loginAdmin } from "../../services/authService";
 
 interface Props {
   onLoginSuccess: () => void;
-  onBackToCustomerView: () => void;
+  onBackToCustomerView?: () => void;
 }
 
-export function AdminLoginPage({ onLoginSuccess, onBackToCustomerView }: Props) {
+export function AdminLoginPage({ onLoginSuccess }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -91,13 +91,6 @@ export function AdminLoginPage({ onLoginSuccess, onBackToCustomerView }: Props) 
             {loading ? "Authenticating..." : "Login to Admin Dashboard"}
           </button>
         </form>
-
-        <button
-          onClick={onBackToCustomerView}
-          className="mt-6 w-full text-center text-xs font-semibold text-slate-500 hover:underline"
-        >
-          ← Back to Customer Menu
-        </button>
       </div>
     </div>
   );
