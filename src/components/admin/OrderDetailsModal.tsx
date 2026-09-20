@@ -4,6 +4,7 @@ import { cafeConfig } from "../../data/cafeConfig";
 interface Props {
   order: OrderDetails;
   onUpdateStatus: (orderId: string, status: OrderStatus) => void;
+  onDeleteOrder?: (orderId: string) => void;
   onClose: () => void;
 }
 
@@ -16,7 +17,7 @@ const statusColors: Record<OrderStatus, { bg: string; text: string; border: stri
   Cancelled: { bg: "bg-rose-50", text: "text-rose-800", border: "border-rose-300" },
 };
 
-export function OrderDetailsModal({ order, onUpdateStatus, onClose }: Props) {
+export function OrderDetailsModal({ order, onUpdateStatus, onDeleteOrder, onClose }: Props) {
   const currentStatus: OrderStatus = order.status || "New";
   const badgeStyle = statusColors[currentStatus] || statusColors.New;
 
@@ -137,12 +138,23 @@ export function OrderDetailsModal({ order, onUpdateStatus, onClose }: Props) {
                 Complete Order
               </button>
             </div>
-            <button
-              onClick={() => onUpdateStatus(order.orderId, "Cancelled")}
-              className="mt-2 w-full rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-            >
-              Cancel Order
-            </button>
+
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => onUpdateStatus(order.orderId, "Cancelled")}
+                className="flex-1 rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
+              >
+                Cancel Order
+              </button>
+              {onDeleteOrder && (
+                <button
+                  onClick={() => onDeleteOrder(order.orderId)}
+                  className="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                >
+                  🗑️ Delete Order
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

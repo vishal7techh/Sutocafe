@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { cafeConfig } from "../../data/cafeConfig";
-import { fetchOrders, updateOrderStatus } from "../../services/orderService";
-import { fetchMenuItems, fetchCategories } from "../../services/menuService";
+import { fetchOrders, updateOrderStatus, deleteOrder, clearAllOrders } from "../../services/orderService";
+import { fetchMenuItems, fetchCategories, saveMenuItem, deleteMenuItem } from "../../services/menuService";
 import { logoutAdmin } from "../../services/authService";
 import type { OrderDetails, OrderStatus, MenuItem, Category } from "../../types";
 import { OrderDetailsModal } from "../../components/admin/OrderDetailsModal";
@@ -138,37 +138,50 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
     });
   }, [orders, historySearch, historyStatusFilter]);
 
-  // Menu item handlers (local state simulation for Phase 5)
-  const handleSaveMenuItem = (itemData: Partial<MenuItem>) => {
-    if (itemData.id) {
-      // Edit
-      setMenuItems((prev) =>
-        prev.map((m) => (m.id === itemData.id ? ({ ...m, ...itemData } as MenuItem) : m))
-      );
-    } else {
-      // Add
-      const newItem: MenuItem = {
-        id: `m_${Date.now()}`,
-        categoryId: itemData.categoryId || categories[0]?.id || "c1",
-        name: itemData.name || "New Item",
-        description: itemData.description || "",
-        price: itemData.price || 0,
-        isVeg: itemData.isVeg ?? true,
-        isAvailable: itemData.isAvailable ?? true,
-        imageUrl: itemData.imageUrl,
-      };
-      setMenuItems((prev) => [...prev, newItem]);
+  // Order Deletion Handlers
+  const handleDeleteOrder = async (orderId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete order ${orderId}?`)) return;
+    await deleteOrder(orderId);
+    setOrders((prev) => prev.filter((o) => o.orderId !== orderId));
+    if (selectedOrder && selectedOrder.orderId === orderId) {
+      setSelectedOrder(null);
     }
   };
 
-  const handleDeleteMenuItem = (itemId: string) => {
+  const handleClearAllOrders = async () => {
+    if (!window.confirm("Are you sure you want to delete ALL test orders? This will clear Order Management, Order History, and reset Today's Sales to ₹0.")) return;
+    await clearAllOrders();
+    setOrders([]);
+    setSelectedOrder(null);
+  };
+
+  // Menu item handlers with Supabase persistence
+  const handleSaveMenuItem = async (itemData: Partial<MenuItem>) => {
+    const saved = await saveMenuItem(itemData, categories);
+    if (saved) {
+      setMenuItems((prev) => {
+        const exists = prev.some((m) => m.id === saved.id || (itemData.id && m.id === itemData.id));
+        if (exists) {
+          return prev.map((m) => (m.id === saved.id || (itemData.id && m.id === itemData.id) ? saved : m));
+        } else {
+          return [...prev, saved];
+        }
+      });
+    }
+  };
+
+  const handleDeleteMenuItem = async (itemId: string) => {
+    await deleteMenuItem(itemId);
     setMenuItems((prev) => prev.filter((m) => m.id !== itemId));
   };
 
-  const handleToggleItemAvailability = (itemId: string) => {
+  const handleToggleItemAvailability = async (item: MenuItem) => {
+    const updated = { ...item, isAvailable: !item.isAvailable };
     setMenuItems((prev) =>
-      prev.map((m) => (m.id === itemId ? { ...m, isAvailable: !m.isAvailable } : m))
+      prev.map((m) => (m.id === item.id ? updated : m))
     );
+    await saveMenuItem(updated, categories);
   };
 
   return (
@@ -342,14 +355,24 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
             {/* 2. LIVE ORDERS MANAGEMENT TAB */}
             {activeTab === "orders" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-display text-lg font-bold text-navy">Order Management</h2>
-                  <button
-                    onClick={() => loadAllData(true)}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                  >
-                    🔄 Refresh
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {orders.length > 0 && (
+                      <button
+                        onClick={handleClearAllOrders}
+                        className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                      >
+                        🧹 Clear All Orders
+                      </button>
+                    )}
+                    <button
+                      onClick={() => loadAllData(true)}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      🔄 Refresh
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -383,12 +406,21 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
 
                       <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
                         <span className="font-bold text-navy">{cafeConfig.currencySymbol}{o.totalAmount}</span>
-                        <button
-                          onClick={() => setSelectedOrder(o)}
-                          className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blueink hover:bg-blue-100"
-                        >
-                          Update Status →
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => handleDeleteOrder(o.orderId, e)}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                            title="Delete Order"
+                          >
+                            🗑️ Delete
+                          </button>
+                          <button
+                            onClick={() => setSelectedOrder(o)}
+                            className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blueink hover:bg-blue-100"
+                          >
+                            Update Status →
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -430,7 +462,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                         </span>
 
                         <button
-                          onClick={() => handleToggleItemAvailability(item.id)}
+                          onClick={() => handleToggleItemAvailability(item)}
                           className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-colors ${
                             item.isAvailable
                               ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
@@ -502,6 +534,14 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-display text-lg font-bold text-navy">Order History</h2>
                   <div className="flex flex-wrap items-center gap-2">
+                    {orders.length > 0 && (
+                      <button
+                        onClick={handleClearAllOrders}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                      >
+                        🧹 Clear All Orders
+                      </button>
+                    )}
                     <input
                       type="text"
                       placeholder="Search ID, Name, Phone, Table..."
@@ -534,8 +574,8 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                     filteredHistory.map((o) => (
                       <div
                         key={o.orderId}
-                        onClick={() => setSelectedOrder(o)}
                         className="flex cursor-pointer items-center justify-between p-4 hover:bg-slate-50"
+                        onClick={() => setSelectedOrder(o)}
                       >
                         <div>
                           <div className="flex items-center gap-2">
@@ -552,8 +592,17 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                           </div>
                         </div>
 
-                        <div className="text-sm font-bold text-navy">
-                          {cafeConfig.currencySymbol}{o.totalAmount}
+                        <div className="flex items-center gap-3">
+                          <div className="text-sm font-bold text-navy">
+                            {cafeConfig.currencySymbol}{o.totalAmount}
+                          </div>
+                          <button
+                            onClick={(e) => handleDeleteOrder(o.orderId, e)}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                            title="Delete Order"
+                          >
+                            🗑️ Delete
+                          </button>
                         </div>
                       </div>
                     ))
@@ -570,6 +619,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         <OrderDetailsModal
           order={selectedOrder}
           onUpdateStatus={handleStatusChange}
+          onDeleteOrder={handleDeleteOrder}
           onClose={() => setSelectedOrder(null)}
         />
       )}

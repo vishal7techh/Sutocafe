@@ -302,3 +302,74 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   }
 }
 
+export async function deleteOrder(orderId: string): Promise<boolean> {
+  // Update local cache
+  const currentLocal = getLocalOrders();
+  const targetOrder = currentLocal.find((o) => o.orderId === orderId);
+  const updatedLocal = currentLocal.filter((o) => o.orderId !== orderId);
+  saveLocalOrders(updatedLocal);
+
+  if (!isSupabaseConfigured || !supabase) {
+    return true;
+  }
+
+  try {
+    // Delete from Supabase orders table (cascade deletes order_items)
+    const { data: deletedOrders, error } = await supabase
+      .from("orders")
+      .delete()
+      .eq("order_number", orderId)
+      .select("table_number");
+
+    if (error) {
+      console.error("Failed to delete order from Supabase:", error);
+      return false;
+    }
+
+    const tableNum = (deletedOrders && deletedOrders[0]?.table_number) ?? targetOrder?.tableNumber;
+    if (tableNum !== undefined && tableNum !== null) {
+      const numTable = Number(tableNum);
+      const { data: activeOrders } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("table_number", numTable)
+        .in("status", ["New", "Accepted", "Preparing", "Ready"]);
+
+      const tableStatus = activeOrders && activeOrders.length > 0 ? "Occupied" : "Available";
+
+      try {
+        await supabase
+          .from("tables")
+          .update({ status: tableStatus })
+          .eq("table_number", numTable);
+      } catch {
+        // ignore
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Exception deleting order from Supabase:", err);
+    return false;
+  }
+}
+
+export async function clearAllOrders(): Promise<boolean> {
+  // Clear local storage cache
+  saveLocalOrders([]);
+
+  if (!isSupabaseConfigured || !supabase) {
+    return true;
+  }
+
+  try {
+    await supabase.from("order_items").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    await supabase.from("orders").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    await supabase.from("tables").update({ status: "Available" }).neq("table_number", 0);
+    return true;
+  } catch (err) {
+    console.error("Exception clearing all orders from Supabase:", err);
+    return false;
+  }
+}
+

@@ -85,10 +85,20 @@ CREATE POLICY "Allow public read access to order items" ON public.order_items FO
 -- 9. PUBLIC INSERT POLICIES
 CREATE POLICY "Allow public insert of orders" ON public.orders FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public insert of order items" ON public.order_items FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow insert menu items" ON public.menu_items FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow insert categories" ON public.categories FOR INSERT WITH CHECK (true);
 
 -- 10. UPDATE POLICIES
 CREATE POLICY "Allow update orders status" ON public.orders FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow update tables status" ON public.tables FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update menu items" ON public.menu_items FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update categories" ON public.categories FOR UPDATE USING (true) WITH CHECK (true);
+
+-- 11. DELETE POLICIES
+CREATE POLICY "Allow delete orders" ON public.orders FOR DELETE USING (true);
+CREATE POLICY "Allow delete order items" ON public.order_items FOR DELETE USING (true);
+CREATE POLICY "Allow delete menu items" ON public.menu_items FOR DELETE USING (true);
+CREATE POLICY "Allow delete categories" ON public.categories FOR DELETE USING (true);
 
 -- 11. TABLE SEED DATA
 INSERT INTO public.tables (table_number, status) VALUES
