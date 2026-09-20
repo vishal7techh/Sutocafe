@@ -57,9 +57,11 @@ export function formatWhatsAppOrderMessage(order: OrderDetails): string {
  * Generates standard WhatsApp click-to-chat URL (zero-cost).
  */
 export function getWhatsAppUrl(message: string, overrideNumber?: string): string {
-  const rawNumber = overrideNumber || cafeConfig.whatsAppNumber;
+  const rawNumber = overrideNumber || cafeConfig.whatsAppNumber || "918080545648";
   const cleanNum = rawNumber.replace(/\D/g, "");
-  const formattedPhone = cleanNum.startsWith("91") && cleanNum.length === 12 ? cleanNum : `91${cleanNum}`;
+  // Force target number 918080545648 if any legacy number is passed
+  const targetNum = cleanNum.includes("7820841208") ? "918080545648" : cleanNum;
+  const formattedPhone = targetNum.startsWith("91") && targetNum.length === 12 ? targetNum : `91${targetNum}`;
   const encodedText = encodeURIComponent(message);
   return `https://wa.me/${formattedPhone}?text=${encodedText}`;
 }

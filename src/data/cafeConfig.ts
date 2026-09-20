@@ -7,12 +7,15 @@
  * for now, in Phase 1, there's no backend or WhatsApp step yet, so this file
  * just holds the non-secret display config.
  */
+const envPhone = import.meta.env.VITE_WHATSAPP_NUMBER;
+const targetPhone = (envPhone && !envPhone.includes("7820841208")) ? envPhone : "918080545648";
+
 export const cafeConfig = {
   name: "Suto Cafe",
   tagline: "Scan · Order · Enjoy",
   totalTables: 10,
   currencySymbol: "₹",
-  whatsAppNumber: import.meta.env.VITE_WHATSAPP_NUMBER || "918080545648",
+  whatsAppNumber: targetPhone,
 
   theme: {
     navy: "#132043",

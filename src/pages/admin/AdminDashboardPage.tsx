@@ -70,10 +70,26 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    const targetOrder = orders.find((o) => o.orderId === orderId);
+    const targetTableNum = targetOrder ? Number(targetOrder.tableNumber) : null;
+
     await updateOrderStatus(orderId, newStatus);
+
     setOrders((prev) =>
-      prev.map((o) => (o.orderId === orderId ? { ...o, status: newStatus } : o))
+      prev.map((o) => {
+        if (o.orderId === orderId) {
+          return { ...o, status: newStatus };
+        }
+        if (newStatus === "Completed" && targetTableNum !== null && Number(o.tableNumber) === targetTableNum) {
+          const st = (o.status || "").trim().toLowerCase();
+          if (st !== "completed" && st !== "cancelled") {
+            return { ...o, status: "Completed" };
+          }
+        }
+        return o;
+      })
     );
+
     if (selectedOrder && selectedOrder.orderId === orderId) {
       setSelectedOrder((prev) => (prev ? { ...prev, status: newStatus } : null));
     }
@@ -81,17 +97,23 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
 
   // Metrics Calculations
   const activeOrders = useMemo(
-    () => orders.filter((o) => o.status !== "Completed" && o.status !== "Cancelled"),
+    () => orders.filter((o) => {
+      const s = (o.status || "").trim().toLowerCase();
+      return s !== "completed" && s !== "cancelled";
+    }),
     [orders]
   );
 
   const pendingCount = useMemo(
-    () => orders.filter((o) => o.status === "New" || o.status === "Accepted" || o.status === "Preparing").length,
+    () => orders.filter((o) => {
+      const s = (o.status || "").trim().toLowerCase();
+      return s === "new" || s === "accepted" || s === "preparing";
+    }).length,
     [orders]
   );
 
   const completedOrders = useMemo(
-    () => orders.filter((o) => o.status === "Completed"),
+    () => orders.filter((o) => (o.status || "").trim().toLowerCase() === "completed"),
     [orders]
   );
 
@@ -437,7 +459,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                 <h2 className="font-display text-lg font-bold text-navy">Table Status Overview</h2>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
                   {Array.from({ length: cafeConfig.totalTables }, (_, i) => i + 1).map((tableNum) => {
-                    const activeOrder = activeOrders.find((o) => o.tableNumber === tableNum);
+                    const activeOrder = activeOrders.find((o) => Number(o.tableNumber) === tableNum);
                     const isOccupied = Boolean(activeOrder);
 
                     return (

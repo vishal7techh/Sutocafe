@@ -41,7 +41,7 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
       .from("orders")
       .insert({
         order_number: orderNumberToInsert,
-        table_number: order.tableNumber,
+        table_number: Number(order.tableNumber),
         customer_name: order.customer.name,
         customer_phone: order.customer.phone,
         total_amount: order.totalAmount,
@@ -56,7 +56,7 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
         .from("orders")
         .insert({
           order_number: orderNumberToInsert,
-          table_number: order.tableNumber,
+          table_number: Number(order.tableNumber),
           customer_name: order.customer.name,
           customer_phone: order.customer.phone,
           total_amount: order.totalAmount,
@@ -65,6 +65,14 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
         .select("id");
       orderRows = retry.data;
       orderErr = retry.error;
+
+      // Sync updated orderId with local cache if fallback ID was generated
+      if (!orderErr) {
+        order.orderId = orderNumberToInsert;
+        const freshLocal = getLocalOrders();
+        const syncedLocal = [order, ...freshLocal.filter((o) => o.orderId !== order.orderId)];
+        saveLocalOrders(syncedLocal);
+      }
     }
 
     const orderRowId = orderRows?.[0]?.id;
@@ -94,7 +102,7 @@ export async function saveOrder(order: OrderDetails): Promise<boolean> {
       await supabase
         .from("tables")
         .update({ status: "Occupied" })
-        .eq("table_number", order.tableNumber);
+        .eq("table_number", Number(order.tableNumber));
     } catch (tblErr) {
       console.warn("Could not update table status in Supabase:", tblErr);
     }
@@ -146,19 +154,22 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
     try {
       const activeTableNumbers = new Set(
         dbOrders
-          .filter((o) => ["New", "Accepted", "Preparing", "Ready"].includes(o.status))
-          .map((o) => o.table_number)
+          .filter((o) => {
+            const st = (o.status || "").trim().toLowerCase();
+            return st !== "completed" && st !== "cancelled";
+          })
+          .map((o) => Number(o.table_number))
       );
 
       const { data: allTables } = await supabase.from("tables").select("table_number, status");
       if (allTables) {
         for (const t of allTables) {
-          const expectedStatus = activeTableNumbers.has(t.table_number) ? "Occupied" : "Available";
+          const expectedStatus = activeTableNumbers.has(Number(t.table_number)) ? "Occupied" : "Available";
           if (t.status !== expectedStatus) {
             await supabase
               .from("tables")
               .update({ status: expectedStatus })
-              .eq("table_number", t.table_number);
+              .eq("table_number", Number(t.table_number));
           }
         }
       }
@@ -170,7 +181,7 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
       const lineItems = itemsByOrderId.get(o.id) || [];
       return {
         orderId: o.order_number,
-        tableNumber: o.table_number,
+        tableNumber: Number(o.table_number),
         customer: {
           name: o.customer_name,
           phone: o.customer_phone,
@@ -195,13 +206,15 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
       };
     });
 
-    // Merge with local orders cache (deduplicating by orderId) so no orders are ever lost
+    // Merge with local orders cache (deduplicating by orderId)
     const localOrders = getLocalOrders();
     const orderMap = new Map<string, OrderDetails>();
     localOrders.forEach((o) => orderMap.set(o.orderId, o));
     supabaseOrders.forEach((o) => orderMap.set(o.orderId, o));
 
-    return Array.from(orderMap.values()).sort((a, b) => (b.orderId > a.orderId ? 1 : -1));
+    const mergedOrders = Array.from(orderMap.values()).sort((a, b) => (b.orderId > a.orderId ? 1 : -1));
+    saveLocalOrders(mergedOrders);
+    return mergedOrders;
   } catch (err) {
     console.error("Exception fetching orders from Supabase:", err);
     return getLocalOrders();
@@ -211,7 +224,25 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<boolean> {
   // Update local cache
   const currentLocal = getLocalOrders();
-  const updatedLocal = currentLocal.map((o) => (o.orderId === orderId ? { ...o, status } : o));
+  let targetTableNumber: number | null = null;
+  const foundTarget = currentLocal.find((o) => o.orderId === orderId);
+  if (foundTarget) {
+    targetTableNumber = Number(foundTarget.tableNumber);
+  }
+
+  const updatedLocal = currentLocal.map((o) => {
+    if (o.orderId === orderId) {
+      return { ...o, status };
+    }
+    // If completing order for table, also mark any remaining active orders for that table as completed
+    if (status === "Completed" && targetTableNumber !== null && Number(o.tableNumber) === targetTableNumber) {
+      const st = (o.status || "").trim().toLowerCase();
+      if (st !== "completed" && st !== "cancelled") {
+        return { ...o, status: "Completed" as OrderStatus };
+      }
+    }
+    return o;
+  });
   saveLocalOrders(updatedLocal);
 
   if (!isSupabaseConfigured || !supabase) {
@@ -219,7 +250,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   }
 
   try {
-    // 1. Update order status in Supabase orders table
+    // 1. Update target order status in Supabase orders table
     const { data: updatedOrders, error } = await supabase
       .from("orders")
       .update({ status })
@@ -228,16 +259,27 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
 
     if (error) {
       console.error("Failed to update order status in Supabase:", error);
-      return false;
     }
 
-    const tableNum = updatedOrders && updatedOrders[0]?.table_number;
-    if (tableNum) {
+    const tableNum = (updatedOrders && updatedOrders[0]?.table_number) ?? targetTableNumber;
+
+    if (tableNum !== null && tableNum !== undefined) {
+      const numTable = Number(tableNum);
+
+      // If status is Completed, mark any other active orders for this table as Completed
+      if (status === "Completed") {
+        await supabase
+          .from("orders")
+          .update({ status: "Completed" })
+          .eq("table_number", numTable)
+          .in("status", ["New", "Accepted", "Preparing", "Ready"]);
+      }
+
       // 2. Check if table has remaining active orders ('New', 'Accepted', 'Preparing', 'Ready')
       const { data: activeOrders } = await supabase
         .from("orders")
         .select("id")
-        .eq("table_number", tableNum)
+        .eq("table_number", numTable)
         .in("status", ["New", "Accepted", "Preparing", "Ready"]);
 
       const tableStatus = activeOrders && activeOrders.length > 0 ? "Occupied" : "Available";
@@ -247,7 +289,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
         await supabase
           .from("tables")
           .update({ status: tableStatus })
-          .eq("table_number", tableNum);
+          .eq("table_number", numTable);
       } catch {
         // ignore table update error
       }
