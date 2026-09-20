@@ -41,9 +41,8 @@ export async function loginAdmin(email: string, pass: string): Promise<{ success
 
   // Demo Admin Fallback (for free student project testing)
   if (
-    (email.toLowerCase() === "admin@sutocafe.com" && pass === "admin123") ||
-    pass === "123456" ||
-    (email.length > 3 && pass.length >= 4)
+    (email.toLowerCase() === "admin@sutocafe.com" && pass === "sutomahima@13") ||
+    pass === "sutomahima@13"
   ) {
     const user: AdminUser = { email: email.toLowerCase(), role: "admin" };
     sessionStorage.setItem(AUTH_KEY, JSON.stringify(user));
