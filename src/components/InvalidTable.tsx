@@ -21,7 +21,7 @@ export function InvalidTable({ onPickForTesting }: Props) {
 
       <div className="mt-6 w-full max-w-[300px] rounded-xl border border-dashed border-slate-300 p-4">
         <div className="mb-2.5 text-[11px] tracking-wide text-slate-400">
-          FOR TESTING — pick a table (simulates scanning its QR)
+          Select table number to view menu:
         </div>
         <div className="grid grid-cols-5 gap-1.5">
           {tableNumbers.map((n) => (

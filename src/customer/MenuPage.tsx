@@ -13,17 +13,7 @@ import { saveOrder } from "../services/orderService";
 import type { CustomerInfo, OrderDetails, CheckoutStep } from "../types";
 import { generateOrderId, formatWhatsAppOrderMessage, getWhatsAppUrl } from "../utils/orderUtils";
 
-export function MenuPage({
-  table,
-  onSwitchTable,
-  onOpenQRCodes,
-  onOpenAdmin,
-}: {
-  table: number;
-  onSwitchTable: () => void;
-  onOpenQRCodes?: () => void;
-  onOpenAdmin?: () => void;
-}) {
+export function MenuPage({ table }: { table: number }) {
   const { categories, menuItems, loading } = useMenuData();
   const { cart, lines, totalItems, subtotal, increment, decrement, clear } = useCart(menuItems);
   const [activeCategoryId, setActiveCategoryId] = useState<string>("");
@@ -178,26 +168,6 @@ export function MenuPage({
       )}
 
 
-      <div className="flex flex-col gap-1 pb-28 pt-1 text-center text-[11px] text-slate-400">
-        <div>
-          Testing another table?{" "}
-          <button onClick={onSwitchTable} className="font-semibold text-blueink underline">
-            Switch table
-          </button>
-        </div>
-        <div className="flex justify-center gap-3">
-          {onOpenQRCodes && (
-            <button onClick={onOpenQRCodes} className="font-semibold text-navy hover:underline">
-              🖨️ Print QR Cards
-            </button>
-          )}
-          {onOpenAdmin && (
-            <button onClick={onOpenAdmin} className="font-semibold text-blueink hover:underline">
-              🔐 Admin Dashboard
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

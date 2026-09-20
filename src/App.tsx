@@ -84,12 +84,5 @@ export default function App() {
     );
   }
 
-  return (
-    <MenuPage
-      table={table}
-      onSwitchTable={() => setDemoTable(null)}
-      onOpenQRCodes={() => setView("qr")}
-      onOpenAdmin={() => setView("admin")}
-    />
-  );
+  return <MenuPage table={table} />;
 }
