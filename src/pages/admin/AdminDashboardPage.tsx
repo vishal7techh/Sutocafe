@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { cafeConfig } from "../../data/cafeConfig";
 import { fetchOrders, updateOrderStatus, deleteOrder, clearAllOrders } from "../../services/orderService";
 import { fetchMenuItems, fetchCategories, saveMenuItem, deleteMenuItem } from "../../services/menuService";
@@ -6,6 +6,7 @@ import { logoutAdmin } from "../../services/authService";
 import type { OrderDetails, OrderStatus, MenuItem, Category } from "../../types";
 import { OrderDetailsModal } from "../../components/admin/OrderDetailsModal";
 import { MenuItemEditorModal } from "../../components/admin/MenuItemEditorModal";
+import { NotificationPanel, AdminNotification } from "../../components/admin/NotificationPanel";
 
 interface Props {
   onLogout: () => void;
@@ -30,6 +31,12 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Notifications State & Event Deduplication Engine
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const previousOrdersRef = useRef<Map<string, OrderDetails>>(new Map());
+  const processedEventIdsRef = useRef<Set<string>>(new Set());
+
   // Selected Order for Modal
   const [selectedOrder, setSelectedOrder] = useState<OrderDetails | null>(null);
 
@@ -48,6 +55,62 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         fetchMenuItems(),
         fetchCategories(),
       ]);
+
+      // Detect New Orders & Status Updates (Diffing Engine with Deduplication)
+      const newNotifications: AdminNotification[] = [];
+      const currentMap = new Map<string, OrderDetails>();
+      const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      fetchedOrders.forEach((newOrd) => {
+        currentMap.set(newOrd.orderId, newOrd);
+        const oldOrd = previousOrdersRef.current.get(newOrd.orderId);
+
+        if (!oldOrd) {
+          // New Order Created Event
+          const eventId = `new_${newOrd.orderId}`;
+          if (!processedEventIdsRef.current.has(eventId)) {
+            processedEventIdsRef.current.add(eventId);
+            newNotifications.push({
+              id: `${eventId}_${Date.now()}`,
+              type: "new_order",
+              orderId: newOrd.orderId,
+              tableNumber: newOrd.tableNumber,
+              customerName: newOrd.customer.name,
+              amount: newOrd.totalAmount,
+              itemsCount: newOrd.lines.reduce((s, l) => s + l.quantity, 0),
+              timestamp: timeNow,
+              createdAt: Date.now(),
+              isUnread: true,
+            });
+          }
+        } else if (oldOrd.status !== newOrd.status) {
+          // Order Status Changed Event
+          const eventId = `status_${newOrd.orderId}_${newOrd.status}`;
+          if (!processedEventIdsRef.current.has(eventId)) {
+            processedEventIdsRef.current.add(eventId);
+            newNotifications.push({
+              id: `${eventId}_${Date.now()}`,
+              type: "status_change",
+              orderId: newOrd.orderId,
+              tableNumber: newOrd.tableNumber,
+              customerName: newOrd.customer.name,
+              amount: newOrd.totalAmount,
+              itemsCount: newOrd.lines.reduce((s, l) => s + l.quantity, 0),
+              oldStatus: oldOrd.status || "New",
+              newStatus: newOrd.status || "New",
+              timestamp: timeNow,
+              createdAt: Date.now(),
+              isUnread: true,
+            });
+          }
+        }
+      });
+
+      if (newNotifications.length > 0) {
+        setNotifications((prev) => [...newNotifications, ...prev]);
+      }
+
+      previousOrdersRef.current = currentMap;
       setOrders(fetchedOrders);
       setMenuItems(fetchedItems);
       setCategories(fetchedCats);
@@ -71,20 +134,39 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     const targetOrder = orders.find((o) => o.orderId === orderId);
-    const targetTableNum = targetOrder ? Number(targetOrder.tableNumber) : null;
+    const oldStatus = targetOrder?.status || "New";
 
     await updateOrderStatus(orderId, newStatus);
+
+    // Record notification event locally for immediate admin feedback
+    if (targetOrder && oldStatus !== newStatus) {
+      const eventId = `status_${orderId}_${newStatus}`;
+      if (!processedEventIdsRef.current.has(eventId)) {
+        processedEventIdsRef.current.add(eventId);
+        setNotifications((prev) => [
+          {
+            id: `${eventId}_${Date.now()}`,
+            type: "status_change",
+            orderId,
+            tableNumber: targetOrder.tableNumber,
+            customerName: targetOrder.customer.name,
+            amount: targetOrder.totalAmount,
+            itemsCount: targetOrder.lines.reduce((s, l) => s + l.quantity, 0),
+            oldStatus,
+            newStatus,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            createdAt: Date.now(),
+            isUnread: true,
+          },
+          ...prev,
+        ]);
+      }
+    }
 
     setOrders((prev) =>
       prev.map((o) => {
         if (o.orderId === orderId) {
           return { ...o, status: newStatus };
-        }
-        if (newStatus === "Completed" && targetTableNum !== null && Number(o.tableNumber) === targetTableNum) {
-          const st = (o.status || "").trim().toLowerCase();
-          if (st !== "completed" && st !== "cancelled") {
-            return { ...o, status: "Completed" };
-          }
         }
         return o;
       })
@@ -201,6 +283,28 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Notification Bell Button with Glow */}
+            <button
+              onClick={() => {
+                setIsNotificationOpen(true);
+                // Mark notifications as read when panel is opened
+                setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
+              }}
+              className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                notifications.some((n) => n.isUnread)
+                  ? "bg-amber-500 text-slate-900 shadow-[0_0_15px_rgba(245,158,11,0.6)] animate-pulse"
+                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+              }`}
+            >
+              <span>🔔</span>
+              <span className="hidden xs:inline">Notifications</span>
+              {notifications.filter((n) => n.isUnread).length > 0 && (
+                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">
+                  {notifications.filter((n) => n.isUnread).length}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={onOpenQRCodes}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700"
@@ -613,6 +717,19 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
           </>
         )}
       </main>
+
+      {/* Admin Notification Panel Modal/Slideout */}
+      {isNotificationOpen && (
+        <NotificationPanel
+          notifications={notifications}
+          onClose={() => setIsNotificationOpen(false)}
+          onClearAll={() => setNotifications([])}
+          onSelectOrder={(orderId) => {
+            const ord = orders.find((o) => o.orderId === orderId);
+            if (ord) setSelectedOrder(ord);
+          }}
+        />
+      )}
 
       {/* Order Details Modal */}
       {selectedOrder && (

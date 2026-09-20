@@ -4,13 +4,18 @@ interface Props {
   totalItems: number;
   subtotal: number;
   onOpen: () => void;
+  hasBottomNav?: boolean;
 }
 
-export function CartBar({ totalItems, subtotal, onOpen }: Props) {
+export function CartBar({ totalItems, subtotal, onOpen, hasBottomNav = true }: Props) {
   if (totalItems === 0) return null;
 
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 px-4 pb-4 pt-3 bg-gradient-to-t from-paper via-paper/95 to-transparent">
+    <div
+      className={`fixed left-1/2 -translate-x-1/2 w-full max-w-[480px] z-30 px-4 pb-3 pt-3 bg-gradient-to-t from-paper via-paper/95 to-transparent transition-all ${
+        hasBottomNav ? "bottom-16" : "bottom-0"
+      }`}
+    >
       <button
         onClick={onOpen}
         className="flex w-full animate-[slideUp_0.25s_ease] items-center justify-between rounded-2xl bg-navy px-4 py-3.5 text-white shadow-[0_10px_30px_rgba(19,32,67,0.35)] hover:bg-slate-800 transition-colors"

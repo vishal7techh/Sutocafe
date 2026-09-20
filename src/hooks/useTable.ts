@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cafeConfig } from "../data/cafeConfig";
 
 /**
@@ -24,6 +24,14 @@ function readTableFromUrl(): number | null {
 export function useTable() {
   const [table, setTable] = useState<number | null>(readTableFromUrl);
 
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setTable(readTableFromUrl());
+    };
+    window.addEventListener("popstate", handleUrlChange);
+    return () => window.removeEventListener("popstate", handleUrlChange);
+  }, []);
+
   /**
    * Dev/demo-only helper so this app is testable without physically
    * printing and scanning 10 QR codes. Not part of the real customer flow.
@@ -41,3 +49,4 @@ export function useTable() {
 
   return { table, setDemoTable };
 }
+

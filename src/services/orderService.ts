@@ -221,6 +221,98 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
   }
 }
 
+export async function fetchCustomerOrders(phone: string): Promise<OrderDetails[]> {
+  if (!phone || !phone.trim()) return [];
+
+  let cleanPhone = phone.trim().replace(/[\s-]/g, "");
+  if (cleanPhone.startsWith("+91")) cleanPhone = cleanPhone.slice(3);
+  else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) cleanPhone = cleanPhone.slice(2);
+  else if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = cleanPhone.slice(1);
+
+  const getFilteredLocal = () => {
+    return getLocalOrders().filter((o) => {
+      let orderPhone = (o.customer?.phone || "").trim().replace(/[\s-]/g, "");
+      if (orderPhone.startsWith("+91")) orderPhone = orderPhone.slice(3);
+      else if (orderPhone.startsWith("91") && orderPhone.length === 12) orderPhone = orderPhone.slice(2);
+      else if (orderPhone.startsWith("0") && orderPhone.length === 11) orderPhone = orderPhone.slice(1);
+      return orderPhone === cleanPhone;
+    });
+  };
+
+  if (!isSupabaseConfigured || !supabase) {
+    return getFilteredLocal();
+  }
+
+  try {
+    // 1. Query Supabase directly for customer's phone number variants
+    const { data: dbOrders, error: orderErr } = await supabase
+      .from("orders")
+      .select("*")
+      .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.+91${cleanPhone},customer_phone.eq.91${cleanPhone},customer_phone.eq.0${cleanPhone},customer_phone.ilike.%${cleanPhone}%`)
+      .order("created_at", { ascending: false });
+
+    if (orderErr || !dbOrders || dbOrders.length === 0) {
+      return getFilteredLocal();
+    }
+
+    // 2. Fetch order items specifically for these customer orders
+    const orderRowIds = dbOrders.map((o) => o.id);
+    const { data: dbItems } = await supabase
+      .from("order_items")
+      .select("*")
+      .in("order_id", orderRowIds);
+
+    const itemsByOrderId = new Map<string, any[]>();
+    if (dbItems) {
+      for (const item of dbItems) {
+        const list = itemsByOrderId.get(item.order_id) || [];
+        list.push(item);
+        itemsByOrderId.set(item.order_id, list);
+      }
+    }
+
+    const supabaseCustomerOrders: OrderDetails[] = dbOrders.map((o) => {
+      const lineItems = itemsByOrderId.get(o.id) || [];
+      return {
+        orderId: o.order_number,
+        tableNumber: Number(o.table_number),
+        customer: {
+          name: o.customer_name,
+          phone: o.customer_phone,
+        },
+        lines: lineItems.map((i: any) => ({
+          item: {
+            id: i.id,
+            categoryId: "",
+            name: i.item_name,
+            description: "",
+            price: Number(i.unit_price),
+            isVeg: true,
+            isAvailable: true,
+          },
+          quantity: i.quantity,
+          lineTotal: Number(i.subtotal),
+        })),
+        subtotal: Number(o.total_amount),
+        totalAmount: Number(o.total_amount),
+        orderTime: new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: (o.status || "New") as OrderStatus,
+      };
+    });
+
+    // Merge with local orders cache for deduplication
+    const localFiltered = getFilteredLocal();
+    const orderMap = new Map<string, OrderDetails>();
+    localFiltered.forEach((o) => orderMap.set(o.orderId, o));
+    supabaseCustomerOrders.forEach((o) => orderMap.set(o.orderId, o));
+
+    return Array.from(orderMap.values()).sort((a, b) => (b.orderId > a.orderId ? 1 : -1));
+  } catch (err) {
+    console.error("Exception fetching customer orders from Supabase:", err);
+    return getFilteredLocal();
+  }
+}
+
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<boolean> {
   // Update local cache
   const currentLocal = getLocalOrders();
@@ -233,13 +325,6 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   const updatedLocal = currentLocal.map((o) => {
     if (o.orderId === orderId) {
       return { ...o, status };
-    }
-    // If completing order for table, also mark any remaining active orders for that table as completed
-    if (status === "Completed" && targetTableNumber !== null && Number(o.tableNumber) === targetTableNumber) {
-      const st = (o.status || "").trim().toLowerCase();
-      if (st !== "completed" && st !== "cancelled") {
-        return { ...o, status: "Completed" as OrderStatus };
-      }
     }
     return o;
   });
@@ -266,16 +351,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
     if (tableNum !== null && tableNum !== undefined) {
       const numTable = Number(tableNum);
 
-      // If status is Completed, mark any other active orders for this table as Completed
-      if (status === "Completed") {
-        await supabase
-          .from("orders")
-          .update({ status: "Completed" })
-          .eq("table_number", numTable)
-          .in("status", ["New", "Accepted", "Preparing", "Ready"]);
-      }
-
-      // 2. Check if table has remaining active orders ('New', 'Accepted', 'Preparing', 'Ready')
+      // Check if table has remaining active orders ('New', 'Accepted', 'Preparing', 'Ready')
       const { data: activeOrders } = await supabase
         .from("orders")
         .select("id")
@@ -284,7 +360,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
 
       const tableStatus = activeOrders && activeOrders.length > 0 ? "Occupied" : "Available";
 
-      // 3. Update table status in tables table
+      // Update table status in tables table
       try {
         await supabase
           .from("tables")

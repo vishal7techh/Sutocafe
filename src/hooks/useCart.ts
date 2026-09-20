@@ -4,27 +4,38 @@ import { MENU_ITEMS } from "../data/menuData";
 
 const STORAGE_KEY = "suto-cafe-cart";
 
-function loadInitialCart(): CartState {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as CartState) : {};
-  } catch {
-    // sessionStorage can be unavailable (private browsing, etc.) — cart just
-    // won't survive a refresh in that case, which is an acceptable fallback.
-    return {};
-  }
-}
 
-export function useCart(allAvailableItems: MenuItem[] = []) {
-  const [cart, setCart] = useState<CartState>(loadInitialCart);
+export function useCart(allAvailableItems: MenuItem[] = [], tableNumber?: number | null) {
+  const storageKey = useMemo(() => {
+    return tableNumber ? `suto-cafe-cart-table-${tableNumber}` : STORAGE_KEY;
+  }, [tableNumber]);
+
+  const [cart, setCart] = useState<CartState>(() => {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      return raw ? (JSON.parse(raw) as CartState) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Re-sync cart state whenever table storageKey changes
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      setCart(raw ? (JSON.parse(raw) as CartState) : {});
+    } catch {
+      setCart({});
+    }
+  }, [storageKey]);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+      sessionStorage.setItem(storageKey, JSON.stringify(cart));
     } catch {
       // ignore storage failures
     }
-  }, [cart]);
+  }, [cart, storageKey]);
 
   const increment = useCallback((itemId: string) => {
     setCart((prev) => ({ ...prev, [itemId]: (prev[itemId] ?? 0) + 1 }));

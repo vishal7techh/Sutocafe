@@ -6,15 +6,21 @@ import { cafeConfig } from "../data/cafeConfig";
  * Must start with 6, 7, 8, or 9 and have exactly 10 digits.
  */
 export function isValidIndianPhone(phone: string): boolean {
-  const cleanPhone = phone.trim().replace(/[\s-]/g, "");
+  let cleanPhone = phone.trim().replace(/[\s-]/g, "");
+  if (cleanPhone.startsWith("+91")) cleanPhone = cleanPhone.slice(3);
+  else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) cleanPhone = cleanPhone.slice(2);
+  else if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = cleanPhone.slice(1);
   return /^[6-9]\d{9}$/.test(cleanPhone);
 }
 
 /**
- * Validates a customer name (non-empty, minimum 2 characters).
+ * Validates a customer name (non-empty, 2-50 chars, must contain alphabetic characters, no script tags).
  */
 export function isValidCustomerName(name: string): boolean {
-  return name.trim().length >= 2;
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 50) return false;
+  if (/<[^>]*>/g.test(trimmed)) return false; // reject script/HTML tags
+  return /[a-zA-Z]/.test(trimmed); // must contain at least one letter
 }
 
 /**

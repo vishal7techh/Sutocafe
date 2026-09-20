@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CustomerInfo } from "../types";
 import { isValidCustomerName, isValidIndianPhone } from "../utils/orderUtils";
+import { getLocalCustomerProfile, saveLocalCustomerProfile } from "../utils/customerUtils";
 
 interface Props {
   tableNumber: number;
@@ -10,8 +11,9 @@ interface Props {
 }
 
 export function CustomerInfoForm({ tableNumber, initialInfo, onProceed, onBack }: Props) {
-  const [name, setName] = useState(initialInfo?.name || "");
-  const [phone, setPhone] = useState(initialInfo?.phone || "");
+  const savedProfile = getLocalCustomerProfile();
+  const [name, setName] = useState(initialInfo?.name || savedProfile?.name || "");
+  const [phone, setPhone] = useState(initialInfo?.phone || savedProfile?.phone || "");
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -29,10 +31,17 @@ export function CustomerInfoForm({ tableNumber, initialInfo, onProceed, onBack }
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      onProceed({
+      let cleanPhone = phone.trim().replace(/[\s-]/g, "");
+      if (cleanPhone.startsWith("+91")) cleanPhone = cleanPhone.slice(3);
+      else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) cleanPhone = cleanPhone.slice(2);
+      else if (cleanPhone.startsWith("0") && cleanPhone.length === 11) cleanPhone = cleanPhone.slice(1);
+      
+      const info: CustomerInfo = {
         name: name.trim(),
-        phone: phone.trim().replace(/[\s-]/g, ""),
-      });
+        phone: cleanPhone,
+      };
+      saveLocalCustomerProfile(info);
+      onProceed(info);
     }
   };
 
