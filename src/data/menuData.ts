@@ -30,6 +30,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "b2", categoryId: "burgers", name: "Veggie Delight Burger", description: "Loaded vegetable patty, lettuce & sauces", price: 109, isVeg: true, isAvailable: true },
   { id: "b3", categoryId: "burgers", name: "Cheese Burger", description: "Classic veg patty burger with a melted cheese slice", price: 119, isVeg: true, isAvailable: true },
   { id: "b4", categoryId: "burgers", name: "Mexican Burger", description: "Spiced Mexican-style veg patty with jalapeños", price: 119, isVeg: true, isAvailable: true },
+  { id: "b5", categoryId: "burgers", name: "Cheese Slice (Add-On)", description: "Extra melted cheese slice", price: 15, isVeg: true, isAvailable: true },
 
   // Sandwich
   { id: "s1", categoryId: "sandwich", name: "Veg Grilled Sandwich", description: "Grilled bread packed with mixed vegetables", price: 89, isVeg: true, isAvailable: true },
@@ -37,12 +38,14 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "s3", categoryId: "sandwich", name: "Cheese Chutney Sandwich", description: "Mint chutney and melted cheese", price: 109, isVeg: true, isAvailable: true },
   { id: "s4", categoryId: "sandwich", name: "Corn Cheese Sandwich", description: "Sweet corn and cheese, grilled golden", price: 109, isVeg: true, isAvailable: true },
   { id: "s5", categoryId: "sandwich", name: "Vegetable Sandwich", description: "Fresh mixed vegetables and butter", price: 119, isVeg: true, isAvailable: true },
+  { id: "s6", categoryId: "sandwich", name: "Cheese Slice (Add-On)", description: "Extra melted cheese slice", price: 15, isVeg: true, isAvailable: true },
 
   // Fries
   { id: "f1", categoryId: "fries", name: "French Fries", description: "Classic salted crispy fries", price: 89, isVeg: true, isAvailable: true },
-  { id: "f2", categoryId: "fries", name: "Peri Peri French Fries", description: "Tossed in tangy peri peri seasoning", price: 89, isVeg: true, isAvailable: true },
+  { id: "f2", categoryId: "fries", name: "Peri Peri French Fries", description: "Tossed in tangy peri peri seasoning", price: 99, isVeg: true, isAvailable: true },
   { id: "f3", categoryId: "fries", name: "Tandoori Fries", description: "Smoky tandoori-spiced fries", price: 109, isVeg: true, isAvailable: true },
   { id: "f4", categoryId: "fries", name: "Cheese Fries", description: "Loaded with melted cheese", price: 109, isVeg: true, isAvailable: true },
+  { id: "f5", categoryId: "fries", name: "Cheese & Jalapeno Dip (Add-On)", description: "Creamy cheesy jalapeno dip", price: 15, isVeg: true, isAvailable: true },
 
   // Maggi
   { id: "m1", categoryId: "maggi", name: "Classic Maggi", description: "The everyday favourite, simply made", price: 79, isVeg: true, isAvailable: true },
@@ -62,6 +65,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "sn2", categoryId: "snacks", name: "Veg Pizza Pocket", description: "Pizza-filled crispy pocket", price: 89, isVeg: true, isAvailable: true },
   { id: "sn3", categoryId: "snacks", name: "Veg Potato Shot", description: "Bite-sized crispy potato snack", price: 89, isVeg: true, isAvailable: true },
   { id: "sn4", categoryId: "snacks", name: "Butter Cheesy Corn", description: "Buttered sweet corn with cheese", price: 119, isVeg: true, isAvailable: true },
+  { id: "sn5", categoryId: "snacks", name: "Cheese & Jalapeno Dip (Add-On)", description: "Creamy cheesy jalapeno dip", price: 15, isVeg: true, isAvailable: true },
 
   // Waffle
   { id: "w1", categoryId: "waffle", name: "Vanilla Waffle", description: "Warm Belgian waffle with vanilla", price: 199, isVeg: true, isAvailable: true },
@@ -78,7 +82,8 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "c4", categoryId: "combos", name: "Suto Special Combo", description: "Aloo Tikki Burger 1+1, Cold Coffee & French Fries", price: 239, isVeg: true, isAvailable: true },
 
   // Espresso
-  { id: "e1", categoryId: "espresso", name: "Hot Coffee", description: "Freshly brewed filter-style hot coffee", price: 49, isVeg: true, isAvailable: true },
+  { id: "e1", categoryId: "espresso", name: "Hot Coffee (Half)", description: "Freshly brewed filter-style hot coffee (half size)", price: 49, isVeg: true, isAvailable: true },
+  { id: "e1_f", categoryId: "espresso", name: "Hot Coffee (Full)", description: "Freshly brewed filter-style hot coffee (full size)", price: 89, isVeg: true, isAvailable: true },
   { id: "e2", categoryId: "espresso", name: "Espresso", description: "A classic single shot", price: 69, isVeg: true, isAvailable: true },
   { id: "e3", categoryId: "espresso", name: "Americano", description: "Espresso lengthened with hot water", price: 89, isVeg: true, isAvailable: true },
   { id: "e4", categoryId: "espresso", name: "Iced Americano", description: "Chilled espresso over ice", price: 109, isVeg: true, isAvailable: true },

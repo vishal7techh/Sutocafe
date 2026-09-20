@@ -137,6 +137,7 @@ INSERT INTO public.menu_items (category_id, name, description, price, is_veg, is
   ('c0300000-0000-0000-0000-000000000003', 'Cheese Chutney Sandwich', 'Mint chutney and melted cheese', 109.00, true, true),
   ('c0300000-0000-0000-0000-000000000003', 'Corn Cheese Sandwich', 'Sweet corn and cheese, grilled golden', 109.00, true, true),
   ('c0300000-0000-0000-0000-000000000003', 'Vegetable Sandwich', 'Fresh mixed vegetables and butter', 119.00, true, true),
+  ('c0300000-0000-0000-0000-000000000003', 'Cheese Slice (Add-On)', 'Extra melted cheese slice', 15.00, true, true),
 
   -- FRIES
   ('c0400000-0000-0000-0000-000000000004', 'French Fries', 'Classic salted crispy fries', 89.00, true, true),
@@ -163,6 +164,7 @@ INSERT INTO public.menu_items (category_id, name, description, price, is_veg, is
   ('c0700000-0000-0000-0000-000000000007', 'Veg Pizza Pocket', 'Pizza-filled crispy pocket', 89.00, true, true),
   ('c0700000-0000-0000-0000-000000000007', 'Veg Potato Shot', 'Bite-sized crispy potato snack', 89.00, true, true),
   ('c0700000-0000-0000-0000-000000000007', 'Butter Cheesy Corn', 'Buttered sweet corn with cheese', 119.00, true, true),
+  ('c0700000-0000-0000-0000-000000000007', 'Cheese & Jalapeno Dip (Add-On)', 'Creamy cheesy jalapeno dip', 15.00, true, true),
 
   -- ESPRESSO
   ('c0800000-0000-0000-0000-000000000008', 'Hot Coffee (Half)', 'Freshly brewed hot coffee (half size)', 49.00, true, true),

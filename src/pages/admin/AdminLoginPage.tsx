@@ -8,8 +8,8 @@ interface Props {
 }
 
 export function AdminLoginPage({ onLoginSuccess, onBackToCustomerView }: Props) {
-  const [email, setEmail] = useState("admin@sutocafe.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -63,7 +63,7 @@ export function AdminLoginPage({ onLoginSuccess, onBackToCustomerView }: Props) 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@sutocafe.com"
+              placeholder="Enter admin email"
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm focus:border-blueink focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -92,16 +92,9 @@ export function AdminLoginPage({ onLoginSuccess, onBackToCustomerView }: Props) 
           </button>
         </form>
 
-        {/* Demo Helper Box */}
-        <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-center text-xs text-blue-900">
-          💡 <strong>Demo Credentials:</strong> <br />
-          Email: <code className="font-bold">admin@sutocafe.com</code> <br />
-          Password: <code className="font-bold">admin123</code>
-        </div>
-
         <button
           onClick={onBackToCustomerView}
-          className="mt-4 w-full text-center text-xs font-semibold text-slate-500 hover:underline"
+          className="mt-6 w-full text-center text-xs font-semibold text-slate-500 hover:underline"
         >
           ← Back to Customer Menu
         </button>

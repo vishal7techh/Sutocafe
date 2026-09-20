@@ -50,7 +50,7 @@ export async function loginAdmin(email: string, pass: string): Promise<{ success
     return { success: true };
   }
 
-  return { success: false, error: "Invalid email or password. Use admin@sutocafe.com / admin123" };
+  return { success: false, error: "Invalid email or password." };
 }
 
 export function logoutAdmin() {
