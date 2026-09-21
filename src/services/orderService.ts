@@ -3,6 +3,19 @@ import type { OrderDetails, OrderStatus } from "../types";
 
 const LOCAL_ORDERS_KEY = "suto_cafe_orders_history";
 
+function formatOrderTime(createdAt?: string): string {
+  if (!createdAt) {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  try {
+    const d = new Date(createdAt);
+    if (isNaN(d.getTime())) return createdAt;
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return createdAt;
+  }
+}
+
 /**
  * Saves order history to local storage cache for offline/demo access.
  */
@@ -201,7 +214,7 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
         })),
         subtotal: Number(o.total_amount),
         totalAmount: Number(o.total_amount),
-        orderTime: new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        orderTime: formatOrderTime(o.created_at),
         status: (o.status || "New") as OrderStatus,
       };
     });
@@ -295,7 +308,7 @@ export async function fetchCustomerOrders(phone: string): Promise<OrderDetails[]
         })),
         subtotal: Number(o.total_amount),
         totalAmount: Number(o.total_amount),
-        orderTime: new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        orderTime: formatOrderTime(o.created_at),
         status: (o.status || "New") as OrderStatus,
       };
     });

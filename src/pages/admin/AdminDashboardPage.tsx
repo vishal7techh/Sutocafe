@@ -7,6 +7,8 @@ import type { OrderDetails, OrderStatus, MenuItem, Category } from "../../types"
 import { OrderDetailsModal } from "../../components/admin/OrderDetailsModal";
 import { MenuItemEditorModal } from "../../components/admin/MenuItemEditorModal";
 import { NotificationPanel, AdminNotification } from "../../components/admin/NotificationPanel";
+import { NewOrderModal } from "../../components/admin/NewOrderModal";
+import alarmSound from "../../assets/alarm_classic.mp3";
 
 interface Props {
   onLogout: () => void;
@@ -36,6 +38,54 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const previousOrdersRef = useRef<Map<string, OrderDetails>>(new Map());
   const processedEventIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef(true);
+
+  // New Order Popup Queue & Looping Audio Ref
+  const [pendingNewOrderModalQueue, setPendingNewOrderModalQueue] = useState<OrderDetails[]>([]);
+  const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const startAlarmLoop = () => {
+    try {
+      if (!alarmAudioRef.current) {
+        alarmAudioRef.current = new Audio(alarmSound || "/Audio/alarm_classic.mp3");
+      }
+      alarmAudioRef.current.loop = true;
+      alarmAudioRef.current.volume = 1.0;
+      const playPromise = alarmAudioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn("Alarm loop sound playback was prevented or failed:", err);
+        });
+      }
+    } catch (err) {
+      console.error("Error starting alarm audio loop:", err);
+    }
+  };
+
+  const stopAlarmLoop = () => {
+    if (alarmAudioRef.current) {
+      try {
+        alarmAudioRef.current.pause();
+        alarmAudioRef.current.currentTime = 0;
+      } catch (err) {
+        console.warn("Error pausing alarm audio loop:", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (pendingNewOrderModalQueue.length > 0) {
+      startAlarmLoop();
+    } else {
+      stopAlarmLoop();
+    }
+  }, [pendingNewOrderModalQueue]);
+
+  useEffect(() => {
+    return () => {
+      stopAlarmLoop();
+    };
+  }, []);
 
   // Selected Order for Modal
   const [selectedOrder, setSelectedOrder] = useState<OrderDetails | null>(null);
@@ -60,6 +110,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
       const newNotifications: AdminNotification[] = [];
       const currentMap = new Map<string, OrderDetails>();
       const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const newlyArrivedOrdersForModal: OrderDetails[] = [];
 
       fetchedOrders.forEach((newOrd) => {
         currentMap.set(newOrd.orderId, newOrd);
@@ -78,10 +129,15 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
               customerName: newOrd.customer.name,
               amount: newOrd.totalAmount,
               itemsCount: newOrd.lines.reduce((s, l) => s + l.quantity, 0),
-              timestamp: timeNow,
+              timestamp: newOrd.orderTime || timeNow,
               createdAt: Date.now(),
               isUnread: true,
             });
+
+            // Queue for popup modal & looping alarm if arriving after initial page load
+            if (!isInitialLoadRef.current) {
+              newlyArrivedOrdersForModal.push(newOrd);
+            }
           }
         } else if (oldOrd.status !== newOrd.status) {
           // Order Status Changed Event
@@ -110,6 +166,15 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         setNotifications((prev) => [...newNotifications, ...prev]);
       }
 
+      if (newlyArrivedOrdersForModal.length > 0) {
+        setPendingNewOrderModalQueue((prev) => {
+          const existingIds = new Set(prev.map((o) => o.orderId));
+          const toAdd = newlyArrivedOrdersForModal.filter((o) => !existingIds.has(o.orderId));
+          return [...prev, ...toAdd];
+        });
+      }
+
+      isInitialLoadRef.current = false;
       previousOrdersRef.current = currentMap;
       setOrders(fetchedOrders);
       setMenuItems(fetchedItems);
@@ -175,6 +240,16 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
     if (selectedOrder && selectedOrder.orderId === orderId) {
       setSelectedOrder((prev) => (prev ? { ...prev, status: newStatus } : null));
     }
+  };
+
+  const handleAcceptNewOrderPopup = async (orderId: string) => {
+    setPendingNewOrderModalQueue((prev) => prev.filter((o) => o.orderId !== orderId));
+    await handleStatusChange(orderId, "Accepted");
+  };
+
+  const handleCancelNewOrderPopup = async (orderId: string) => {
+    setPendingNewOrderModalQueue((prev) => prev.filter((o) => o.orderId !== orderId));
+    await handleStatusChange(orderId, "Cancelled");
   };
 
   // Metrics Calculations
@@ -749,6 +824,16 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
           onSave={handleSaveMenuItem}
           onDelete={handleDeleteMenuItem}
           onClose={() => setEditingMenuItem(null)}
+        />
+      )}
+
+      {/* New Order Alert Popup Modal with Looping Alarm */}
+      {pendingNewOrderModalQueue.length > 0 && (
+        <NewOrderModal
+          order={pendingNewOrderModalQueue[0]}
+          onAccept={handleAcceptNewOrderPopup}
+          onCancel={handleCancelNewOrderPopup}
+          pendingCount={pendingNewOrderModalQueue.length}
         />
       )}
     </div>
