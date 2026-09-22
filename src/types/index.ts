@@ -40,6 +40,7 @@ export interface OrderDetails {
   subtotal: number;
   totalAmount: number;
   orderTime: string;
+  createdAt?: string;
   status?: OrderStatus;
 }
 

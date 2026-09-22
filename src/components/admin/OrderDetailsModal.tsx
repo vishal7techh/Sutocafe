@@ -1,5 +1,6 @@
 import type { OrderDetails, OrderStatus } from "../../types";
 import { cafeConfig } from "../../data/cafeConfig";
+import { formatOrderDateTime } from "../../utils/dateUtils";
 
 interface Props {
   order: OrderDetails;
@@ -66,7 +67,7 @@ export function OrderDetailsModal({ order, onUpdateStatus, onDeleteOrder, onClos
             <div className="mt-2 text-xs text-slate-600">
               <div><span className="font-semibold text-slate-800">Customer:</span> {order.customer.name}</div>
               <div><span className="font-semibold text-slate-800">Phone:</span> +91 {order.customer.phone}</div>
-              <div><span className="font-semibold text-slate-800">Time:</span> {order.orderTime}</div>
+              <div><span className="font-semibold text-slate-800">Date & Time:</span> {formatOrderDateTime(order)}</div>
             </div>
           </div>
 

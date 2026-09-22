@@ -37,6 +37,9 @@ function saveLocalOrders(orders: OrderDetails[]) {
 }
 
 export async function saveOrder(order: OrderDetails): Promise<boolean> {
+  if (!order.createdAt) {
+    order.createdAt = new Date().toISOString();
+  }
   // Always update local cache first for instant UI response
   const currentLocal = getLocalOrders();
   const updatedLocal = [order, ...currentLocal.filter((o) => o.orderId !== order.orderId)];
@@ -215,6 +218,7 @@ export async function fetchOrders(): Promise<OrderDetails[]> {
         subtotal: Number(o.total_amount),
         totalAmount: Number(o.total_amount),
         orderTime: formatOrderTime(o.created_at),
+        createdAt: o.created_at || new Date().toISOString(),
         status: (o.status || "New") as OrderStatus,
       };
     });
@@ -309,6 +313,7 @@ export async function fetchCustomerOrders(phone: string): Promise<OrderDetails[]
         subtotal: Number(o.total_amount),
         totalAmount: Number(o.total_amount),
         orderTime: formatOrderTime(o.created_at),
+        createdAt: o.created_at || new Date().toISOString(),
         status: (o.status || "New") as OrderStatus,
       };
     });

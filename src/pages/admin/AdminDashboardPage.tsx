@@ -9,6 +9,13 @@ import { MenuItemEditorModal } from "../../components/admin/MenuItemEditorModal"
 import { NotificationPanel, AdminNotification } from "../../components/admin/NotificationPanel";
 import { NewOrderModal } from "../../components/admin/NewOrderModal";
 import alarmSound from "../../assets/alarm_classic.mp3";
+import {
+  getTodayDateString,
+  getYesterdayDateString,
+  getOrderDateString,
+  formatFriendlyDate,
+  formatOrderDateTime,
+} from "../../utils/dateUtils";
 
 interface Props {
   onLogout: () => void;
@@ -93,9 +100,27 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   // Menu Item Editor Modal
   const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | "new" | null>(null);
 
-  // History Search & Filter
+  // Today Date & Midnight 12:00 AM Auto-Reset Engine
+  const [todayDateStr, setTodayDateStr] = useState<string>(getTodayDateString());
+
+  // History Search & Date-wise Filters
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>("all");
+  const [historyDateFilter, setHistoryDateFilter] = useState<string>("all");
+
+  // Detect 12:00 AM Midnight Rollover to reset Today's Sales & clear notifications for new day
+  useEffect(() => {
+    const midnightInterval = setInterval(() => {
+      const currentRealToday = getTodayDateString();
+      if (currentRealToday !== todayDateStr) {
+        console.log(`[Midnight Rollover] Resetting today's metrics and notifications for new date: ${currentRealToday}`);
+        setTodayDateStr(currentRealToday);
+        setNotifications([]);
+      }
+    }, 10000);
+
+    return () => clearInterval(midnightInterval);
+  }, [todayDateStr]);
 
   const loadAllData = async (showLoadingSpinner = true) => {
     if (showLoadingSpinner) setLoading(true);
@@ -252,7 +277,12 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
     await handleStatusChange(orderId, "Cancelled");
   };
 
-  // Metrics Calculations
+  // Metrics Calculations (Strictly Scoped for TODAY - resets after 12:00 AM midnight)
+  const todayOrders = useMemo(
+    () => orders.filter((o) => getOrderDateString(o) === todayDateStr),
+    [orders, todayDateStr]
+  );
+
   const activeOrders = useMemo(
     () => orders.filter((o) => {
       const s = (o.status || "").trim().toLowerCase();
@@ -262,16 +292,16 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   );
 
   const pendingCount = useMemo(
-    () => orders.filter((o) => {
+    () => todayOrders.filter((o) => {
       const s = (o.status || "").trim().toLowerCase();
       return s === "new" || s === "accepted" || s === "preparing";
     }).length,
-    [orders]
+    [todayOrders]
   );
 
   const completedOrders = useMemo(
-    () => orders.filter((o) => (o.status || "").trim().toLowerCase() === "completed"),
-    [orders]
+    () => todayOrders.filter((o) => (o.status || "").trim().toLowerCase() === "completed"),
+    [todayOrders]
   );
 
   const todayRevenue = useMemo(
@@ -279,7 +309,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
     [completedOrders]
   );
 
-  // Filtered History
+  // Filtered History (Date-wise, Search, Status)
   const filteredHistory = useMemo(() => {
     return orders.filter((o) => {
       const matchesSearch =
@@ -291,9 +321,54 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
       const matchesStatus =
         historyStatusFilter === "all" || o.status === historyStatusFilter;
 
-      return matchesSearch && matchesStatus;
+      const orderDate = getOrderDateString(o);
+      let matchesDate = true;
+      if (historyDateFilter === "today") {
+        matchesDate = orderDate === todayDateStr;
+      } else if (historyDateFilter === "yesterday") {
+        matchesDate = orderDate === getYesterdayDateString();
+      } else if (historyDateFilter !== "all") {
+        matchesDate = orderDate === historyDateFilter;
+      }
+
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [orders, historySearch, historyStatusFilter]);
+  }, [orders, historySearch, historyStatusFilter, historyDateFilter, todayDateStr]);
+
+  // Selected Date Stats Summary for History Tab
+  const historyDateSummary = useMemo(() => {
+    if (historyDateFilter === "all") return null;
+
+    let targetDate = historyDateFilter;
+    if (historyDateFilter === "today") targetDate = todayDateStr;
+    else if (historyDateFilter === "yesterday") targetDate = getYesterdayDateString();
+
+    const ordersForDate = orders.filter((o) => getOrderDateString(o) === targetDate);
+    const completed = ordersForDate.filter((o) => (o.status || "").trim().toLowerCase() === "completed");
+    const pending = ordersForDate.filter((o) => {
+      const s = (o.status || "").trim().toLowerCase();
+      return s === "new" || s === "accepted" || s === "preparing" || s === "ready";
+    });
+    const cancelled = ordersForDate.filter((o) => (o.status || "").trim().toLowerCase() === "cancelled");
+    const totalSales = completed.reduce((sum, o) => sum + o.totalAmount, 0);
+
+    return {
+      targetDate,
+      friendlyDate: formatFriendlyDate(targetDate),
+      totalOrders: ordersForDate.length,
+      totalSales,
+      completedCount: completed.length,
+      pendingCount: pending.length,
+      cancelledCount: cancelled.length,
+    };
+  }, [orders, historyDateFilter, todayDateStr]);
+
+  // Distinct dates present in orders for dropdown selection
+  const availableOrderDates = useMemo(() => {
+    const datesSet = new Set<string>();
+    orders.forEach((o) => datesSet.add(getOrderDateString(o)));
+    return Array.from(datesSet).sort((a, b) => (b > a ? 1 : -1));
+  }, [orders]);
 
   // Order Deletion Handlers
   const handleDeleteOrder = async (orderId: string, e?: React.MouseEvent) => {
@@ -462,15 +537,18 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                 {/* Metric Summary Cards */}
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Sales</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Sales</span>
+                      <span className="text-[10px] font-semibold text-slate-400">Resets @ 12:00 AM</span>
+                    </div>
                     <div className="mt-1 text-2xl font-black text-emerald-600">
                       {cafeConfig.currencySymbol}{todayRevenue}
                     </div>
                   </div>
 
                   <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Orders</span>
-                    <div className="mt-1 text-2xl font-black text-navy">{orders.length}</div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Orders</span>
+                    <div className="mt-1 text-2xl font-black text-navy">{todayOrders.length}</div>
                   </div>
 
                   <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
@@ -711,7 +789,10 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
             {activeTab === "history" && (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-lg font-bold text-navy">Order History</h2>
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-navy">Order History</h2>
+                    <p className="text-xs text-slate-500">View and filter orders saved in database date-wise</p>
+                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {orders.length > 0 && (
                       <button
@@ -721,39 +802,158 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                         🧹 Clear All Orders
                       </button>
                     )}
-                    <input
-                      type="text"
-                      placeholder="Search ID, Name, Phone, Table..."
-                      value={historySearch}
-                      onChange={(e) => setHistorySearch(e.target.value)}
-                      className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-xs focus:border-blueink focus:outline-none"
-                    />
-                    <select
-                      value={historyStatusFilter}
-                      onChange={(e) => setHistoryStatusFilter(e.target.value)}
-                      className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:border-blueink focus:outline-none"
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="New">New</option>
-                      <option value="Accepted">Accepted</option>
-                      <option value="Preparing">Preparing</option>
-                      <option value="Ready">Ready</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Cancelled">Cancelled</option>
-                    </select>
                   </div>
                 </div>
+
+                {/* History Filter Bar: Date Presets, Date Picker, Search & Status */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    {/* Date Presets Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                      <span className="text-slate-400 mr-1">📅 Date:</span>
+                      <button
+                        onClick={() => setHistoryDateFilter("all")}
+                        className={`rounded-lg px-3 py-1.5 transition-all ${
+                          historyDateFilter === "all"
+                            ? "bg-navy text-white font-bold"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        All Dates
+                      </button>
+                      <button
+                        onClick={() => setHistoryDateFilter("today")}
+                        className={`rounded-lg px-3 py-1.5 transition-all ${
+                          historyDateFilter === "today"
+                            ? "bg-navy text-white font-bold"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        onClick={() => setHistoryDateFilter("yesterday")}
+                        className={`rounded-lg px-3 py-1.5 transition-all ${
+                          historyDateFilter === "yesterday"
+                            ? "bg-navy text-white font-bold"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        Yesterday
+                      </button>
+                      
+                      {/* Dropdown of available dates in DB */}
+                      {availableOrderDates.length > 0 && (
+                        <select
+                          value={
+                            historyDateFilter !== "all" && historyDateFilter !== "today" && historyDateFilter !== "yesterday"
+                              ? historyDateFilter
+                              : ""
+                          }
+                          onChange={(e) => setHistoryDateFilter(e.target.value || "all")}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 focus:border-blueink focus:outline-none"
+                        >
+                          <option value="">Select Specific Date...</option>
+                          {availableOrderDates.map((dStr) => (
+                            <option key={dStr} value={dStr}>
+                              {formatFriendlyDate(dStr)} ({dStr})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Search & Status Filters */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Search ID, Name, Phone..."
+                        value={historySearch}
+                        onChange={(e) => setHistorySearch(e.target.value)}
+                        className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-xs focus:border-blueink focus:outline-none"
+                      />
+                      <select
+                        value={historyStatusFilter}
+                        onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                        className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:border-blueink focus:outline-none"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="New">New</option>
+                        <option value="Accepted">Accepted</option>
+                        <option value="Preparing">Preparing</option>
+                        <option value="Ready">Ready</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date Summary Card (shows stats for selected date) */}
+                {historyDateSummary && (
+                  <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-sky-50/90 p-4 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/60 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">📊</span>
+                        <div>
+                          <h3 className="font-display text-sm font-bold text-navy">
+                            Daily Sales Summary for {historyDateSummary.friendlyDate}
+                          </h3>
+                          <p className="text-[11px] text-slate-500">
+                            Saved date record: <span className="font-mono font-semibold">{historyDateSummary.targetDate}</span>
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setHistoryDateFilter("all")}
+                        className="rounded-lg bg-white px-3 py-1 text-xs font-bold text-slate-600 shadow-xs border border-slate-200 hover:bg-slate-50"
+                      >
+                        Show All Dates ✕
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="rounded-xl bg-white p-3 shadow-xs border border-slate-200/70">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Sales</span>
+                        <div className="mt-0.5 text-xl font-black text-emerald-600">
+                          {cafeConfig.currencySymbol}{historyDateSummary.totalSales}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-white p-3 shadow-xs border border-slate-200/70">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Orders</span>
+                        <div className="mt-0.5 text-xl font-black text-navy">
+                          {historyDateSummary.totalOrders}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-white p-3 shadow-xs border border-slate-200/70">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Completed</span>
+                        <div className="mt-0.5 text-xl font-black text-blueink">
+                          {historyDateSummary.completedCount}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-white p-3 shadow-xs border border-slate-200/70">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending / Cancelled</span>
+                        <div className="mt-1 text-xs font-bold text-slate-700">
+                          ⏳ {historyDateSummary.pendingCount} | ❌ {historyDateSummary.cancelledCount}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                   {filteredHistory.length === 0 ? (
                     <div className="p-8 text-center text-xs text-slate-400">
-                      No matching orders found in history.
+                      No matching orders found in history for the selected filter.
                     </div>
                   ) : (
                     filteredHistory.map((o) => (
                       <div
                         key={o.orderId}
-                        className="flex cursor-pointer items-center justify-between p-4 hover:bg-slate-50"
+                        className="flex cursor-pointer items-center justify-between p-4 hover:bg-slate-50 transition-colors"
                         onClick={() => setSelectedOrder(o)}
                       >
                         <div>
@@ -767,7 +967,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                             </span>
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            {o.customer.name} ({o.customer.phone}) — {o.orderTime}
+                            {o.customer.name} ({o.customer.phone}) — <span className="font-semibold text-slate-700">{formatOrderDateTime(o)}</span>
                           </div>
                         </div>
 

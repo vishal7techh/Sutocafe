@@ -147,6 +147,7 @@ export function MenuPage({ table }: { table: number }) {
         subtotal,
         totalAmount: subtotal,
         orderTime: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        createdAt: new Date().toISOString(),
         status: "New",
       };
 
