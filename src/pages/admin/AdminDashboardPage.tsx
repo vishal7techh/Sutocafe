@@ -609,13 +609,16 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
               </div>
             )}
 
-            {/* 2. LIVE ORDERS MANAGEMENT TAB */}
+            {/* 2. LIVE ORDERS MANAGEMENT TAB (TODAY'S ORDERS ONLY) */}
             {activeTab === "orders" && (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-lg font-bold text-navy">Order Management</h2>
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-navy">Today's Orders ({todayOrders.length})</h2>
+                    <p className="text-xs text-slate-500">Live order management for today. Auto-refreshes for new date at 12:00 AM midnight.</p>
+                  </div>
                   <div className="flex items-center gap-2">
-                    {orders.length > 0 && (
+                    {todayOrders.length > 0 && (
                       <button
                         onClick={handleClearAllOrders}
                         className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
@@ -632,56 +635,66 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {orders.map((o) => (
-                    <div key={o.orderId} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-md bg-blueink px-2 py-0.5 text-xs font-black text-white">
-                            Table {o.tableNumber}
+                {todayOrders.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-semibold text-slate-400 bg-white rounded-2xl border border-slate-200/80 p-8 shadow-xs">
+                    <div className="mx-auto mb-2 text-3xl">📋</div>
+                    No orders placed today yet.
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Orders placed today will appear here and automatically refresh tomorrow at 12:00 AM midnight. Past orders are available in <strong>Order History</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {todayOrders.map((o) => (
+                      <div key={o.orderId} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-md bg-blueink px-2 py-0.5 text-xs font-black text-white">
+                              Table {o.tableNumber}
+                            </span>
+                            <span className="font-mono text-xs font-bold text-slate-400">{o.orderId}</span>
+                          </div>
+                          <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${statusColors[o.status || "New"].bg} ${statusColors[o.status || "New"].text}`}>
+                            {o.status || "New"}
                           </span>
-                          <span className="font-mono text-xs font-bold text-slate-400">{o.orderId}</span>
                         </div>
-                        <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${statusColors[o.status || "New"].bg} ${statusColors[o.status || "New"].text}`}>
-                          {o.status || "New"}
-                        </span>
-                      </div>
 
-                      <div className="my-3 text-xs text-slate-600">
-                        <div className="font-semibold text-slate-800">{o.customer.name} ({o.customer.phone})</div>
-                        <div className="text-[11px] text-slate-400">Time: {o.orderTime}</div>
+                        <div className="my-3 text-xs text-slate-600">
+                          <div className="font-semibold text-slate-800">{o.customer.name} ({o.customer.phone})</div>
+                          <div className="text-[11px] text-slate-400">Time: {o.orderTime}</div>
 
-                        <div className="mt-2.5 rounded-lg bg-slate-50 p-2 text-slate-700">
-                          {o.lines.map((l, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span>{l.quantity} × {l.item.name}</span>
-                              <span className="font-semibold">{cafeConfig.currencySymbol}{l.lineTotal}</span>
-                            </div>
-                          ))}
+                          <div className="mt-2.5 rounded-lg bg-slate-50 p-2 text-slate-700">
+                            {o.lines.map((l, i) => (
+                              <div key={i} className="flex justify-between">
+                                <span>{l.quantity} × {l.item.name}</span>
+                                <span className="font-semibold">{cafeConfig.currencySymbol}{l.lineTotal}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
-                        <span className="font-bold text-navy">{cafeConfig.currencySymbol}{o.totalAmount}</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => handleDeleteOrder(o.orderId, e)}
-                            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-                            title="Delete Order"
-                          >
-                            🗑️ Delete
-                          </button>
-                          <button
-                            onClick={() => setSelectedOrder(o)}
-                            className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blueink hover:bg-blue-100"
-                          >
-                            Update Status →
-                          </button>
+                        <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
+                          <span className="font-bold text-navy">{cafeConfig.currencySymbol}{o.totalAmount}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => handleDeleteOrder(o.orderId, e)}
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                              title="Delete Order"
+                            >
+                              🗑️ Delete
+                            </button>
+                            <button
+                              onClick={() => setSelectedOrder(o)}
+                              className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blueink hover:bg-blue-100"
+                            >
+                              Update Status →
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
