@@ -19,6 +19,7 @@ interface Props {
   notifications: AdminNotification[];
   onClose: () => void;
   onClearAll: () => void;
+  onClearNotification?: (id: string) => void;
   onSelectOrder: (orderId: string) => void;
 }
 
@@ -26,6 +27,7 @@ export function NotificationPanel({
   notifications,
   onClose,
   onClearAll,
+  onClearNotification,
   onSelectOrder,
 }: Props) {
   return (
@@ -103,9 +105,23 @@ export function NotificationPanel({
                     </span>
                   </div>
 
-                  <span className="text-[11px] font-medium text-slate-400">
-                    {n.timestamp}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-slate-400">
+                      {n.timestamp}
+                    </span>
+                    {onClearNotification && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onClearNotification(n.id);
+                        }}
+                        className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-colors"
+                        title="Dismiss notification"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-2 text-xs text-slate-700">

@@ -40,11 +40,68 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Notifications State & Event Deduplication Engine
-  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  // Notification localStorage persistence helpers
+  const NOTIFICATIONS_STORAGE_KEY = "suto_cafe_admin_notifications_v2";
+
+  const getStoredNotificationsData = (todayStr: string) => {
+    try {
+      const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+      if (!raw) return { date: todayStr, notifications: [] as AdminNotification[], clearedEventIds: [] as string[], clearedAllTimestamp: 0 };
+      const parsed = JSON.parse(raw);
+      if (parsed.date !== todayStr) {
+        return { date: todayStr, notifications: [] as AdminNotification[], clearedEventIds: [] as string[], clearedAllTimestamp: 0 };
+      }
+      return {
+        date: todayStr,
+        notifications: Array.isArray(parsed.notifications) ? (parsed.notifications as AdminNotification[]) : [],
+        clearedEventIds: Array.isArray(parsed.clearedEventIds) ? (parsed.clearedEventIds as string[]) : [],
+        clearedAllTimestamp: typeof parsed.clearedAllTimestamp === "number" ? parsed.clearedAllTimestamp : 0,
+      };
+    } catch {
+      return { date: todayStr, notifications: [] as AdminNotification[], clearedEventIds: [] as string[], clearedAllTimestamp: 0 };
+    }
+  };
+
+  const saveStoredNotificationsData = (
+    todayStr: string,
+    notifs: AdminNotification[],
+    clearedIds: string[],
+    clearedTimeMs: number
+  ) => {
+    try {
+      localStorage.setItem(
+        NOTIFICATIONS_STORAGE_KEY,
+        JSON.stringify({
+          date: todayStr,
+          notifications: notifs,
+          clearedEventIds: clearedIds,
+          clearedAllTimestamp: clearedTimeMs,
+        })
+      );
+    } catch {
+      // Ignore quota errors
+    }
+  };
+
+  // Today Date & Midnight 12:00 AM Auto-Reset Engine
+  const [todayDateStr, setTodayDateStr] = useState<string>(getTodayDateString());
+
+  // Load initial notifications state from localStorage for today
+  const initialStoredNotifs = useMemo(() => getStoredNotificationsData(todayDateStr), []);
+  const [notifications, setNotifications] = useState<AdminNotification[]>(initialStoredNotifs.notifications);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+
   const previousOrdersRef = useRef<Map<string, OrderDetails>>(new Map());
-  const processedEventIdsRef = useRef<Set<string>>(new Set());
+  const clearedEventIdsRef = useRef<Set<string>>(new Set(initialStoredNotifs.clearedEventIds));
+  const clearedAllTimestampRef = useRef<number>(initialStoredNotifs.clearedAllTimestamp || 0);
+
+  // Initialize processed event IDs with both cleared event IDs and active notification IDs
+  const processedEventIdsRef = useRef<Set<string>>(
+    new Set([
+      ...initialStoredNotifs.clearedEventIds,
+      ...initialStoredNotifs.notifications.map((n) => n.id.split("_").slice(0, 2).join("_")),
+    ])
+  );
   const isInitialLoadRef = useRef(true);
 
   // New Order Popup Queue & Looping Audio Ref
@@ -100,13 +157,46 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   // Menu Item Editor Modal
   const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | "new" | null>(null);
 
-  // Today Date & Midnight 12:00 AM Auto-Reset Engine
-  const [todayDateStr, setTodayDateStr] = useState<string>(getTodayDateString());
-
   // History Search & Date-wise Filters
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState<string>("all");
   const [historyDateFilter, setHistoryDateFilter] = useState<string>("all");
+
+  // Clear All & Single Notification Handlers (persisting cleared state to localStorage)
+  const handleClearAllNotifications = () => {
+    notifications.forEach((n) => {
+      const parts = n.id.split("_");
+      const eventId = parts.slice(0, 2).join("_");
+      clearedEventIdsRef.current.add(eventId);
+    });
+    clearedAllTimestampRef.current = Date.now();
+    setNotifications([]);
+    saveStoredNotificationsData(
+      todayDateStr,
+      [],
+      Array.from(clearedEventIdsRef.current),
+      clearedAllTimestampRef.current
+    );
+  };
+
+  const handleClearSingleNotification = (notificationId: string) => {
+    const target = notifications.find((n) => n.id === notificationId);
+    if (target) {
+      const parts = target.id.split("_");
+      const eventId = parts.slice(0, 2).join("_");
+      clearedEventIdsRef.current.add(eventId);
+    }
+    setNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== notificationId);
+      saveStoredNotificationsData(
+        todayDateStr,
+        updated,
+        Array.from(clearedEventIdsRef.current),
+        clearedAllTimestampRef.current
+      );
+      return updated;
+    });
+  };
 
   // Detect 12:00 AM Midnight Rollover to reset Today's Sales & clear notifications for new day
   useEffect(() => {
@@ -116,8 +206,12 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         console.log(`[Midnight Rollover] Resetting today's metrics and notifications for new date: ${currentRealToday}`);
         setTodayDateStr(currentRealToday);
         setNotifications([]);
+        clearedEventIdsRef.current.clear();
+        processedEventIdsRef.current.clear();
+        clearedAllTimestampRef.current = 0;
+        saveStoredNotificationsData(currentRealToday, [], [], 0);
       }
-    }, 10000);
+    }, 5000);
 
     return () => clearInterval(midnightInterval);
   }, [todayDateStr]);
@@ -141,10 +235,28 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         currentMap.set(newOrd.orderId, newOrd);
         const oldOrd = previousOrdersRef.current.get(newOrd.orderId);
 
+        // REQUIREMENT 1: Only process/show notifications for orders placed TODAY!
+        const orderDate = getOrderDateString(newOrd);
+        if (orderDate !== todayDateStr) {
+          return; // Skip past dates (e.g. 21, 22 when today is 23)
+        }
+
+        let orderCreatedMs = Date.now();
+        if (newOrd.createdAt) {
+          const parsedMs = new Date(newOrd.createdAt).getTime();
+          if (!isNaN(parsedMs)) orderCreatedMs = parsedMs;
+        }
+
+        const isBeforeClearAll = clearedAllTimestampRef.current > 0 && orderCreatedMs <= clearedAllTimestampRef.current;
+
         if (!oldOrd) {
           // New Order Created Event
           const eventId = `new_${newOrd.orderId}`;
-          if (!processedEventIdsRef.current.has(eventId)) {
+          if (
+            !processedEventIdsRef.current.has(eventId) &&
+            !clearedEventIdsRef.current.has(eventId) &&
+            !isBeforeClearAll
+          ) {
             processedEventIdsRef.current.add(eventId);
             newNotifications.push({
               id: `${eventId}_${Date.now()}`,
@@ -167,7 +279,7 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         } else if (oldOrd.status !== newOrd.status) {
           // Order Status Changed Event
           const eventId = `status_${newOrd.orderId}_${newOrd.status}`;
-          if (!processedEventIdsRef.current.has(eventId)) {
+          if (!processedEventIdsRef.current.has(eventId) && !clearedEventIdsRef.current.has(eventId)) {
             processedEventIdsRef.current.add(eventId);
             newNotifications.push({
               id: `${eventId}_${Date.now()}`,
@@ -188,7 +300,16 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
       });
 
       if (newNotifications.length > 0) {
-        setNotifications((prev) => [...newNotifications, ...prev]);
+        setNotifications((prev) => {
+          const updated = [...newNotifications, ...prev];
+          saveStoredNotificationsData(
+            todayDateStr,
+            updated,
+            Array.from(clearedEventIdsRef.current),
+            clearedAllTimestampRef.current
+          );
+          return updated;
+        });
       }
 
       if (newlyArrivedOrdersForModal.length > 0) {
@@ -228,28 +349,37 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
 
     await updateOrderStatus(orderId, newStatus);
 
-    // Record notification event locally for immediate admin feedback
-    if (targetOrder && oldStatus !== newStatus) {
+    // Record notification event locally for immediate admin feedback (only if order is from TODAY)
+    if (targetOrder && oldStatus !== newStatus && getOrderDateString(targetOrder) === todayDateStr) {
       const eventId = `status_${orderId}_${newStatus}`;
       if (!processedEventIdsRef.current.has(eventId)) {
         processedEventIdsRef.current.add(eventId);
-        setNotifications((prev) => [
-          {
-            id: `${eventId}_${Date.now()}`,
-            type: "status_change",
-            orderId,
-            tableNumber: targetOrder.tableNumber,
-            customerName: targetOrder.customer.name,
-            amount: targetOrder.totalAmount,
-            itemsCount: targetOrder.lines.reduce((s, l) => s + l.quantity, 0),
-            oldStatus,
-            newStatus,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            createdAt: Date.now(),
-            isUnread: true,
-          },
-          ...prev,
-        ]);
+        setNotifications((prev) => {
+          const updated = [
+            {
+              id: `${eventId}_${Date.now()}`,
+              type: "status_change" as const,
+              orderId,
+              tableNumber: targetOrder.tableNumber,
+              customerName: targetOrder.customer.name,
+              amount: targetOrder.totalAmount,
+              itemsCount: targetOrder.lines.reduce((s, l) => s + l.quantity, 0),
+              oldStatus,
+              newStatus,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              createdAt: Date.now(),
+              isUnread: true,
+            },
+            ...prev,
+          ];
+          saveStoredNotificationsData(
+            todayDateStr,
+            updated,
+            Array.from(clearedEventIdsRef.current),
+            clearedAllTimestampRef.current
+          );
+          return updated;
+        });
       }
     }
 
@@ -1011,7 +1141,8 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
         <NotificationPanel
           notifications={notifications}
           onClose={() => setIsNotificationOpen(false)}
-          onClearAll={() => setNotifications([])}
+          onClearAll={handleClearAllNotifications}
+          onClearNotification={handleClearSingleNotification}
           onSelectOrder={(orderId) => {
             const ord = orders.find((o) => o.orderId === orderId);
             if (ord) setSelectedOrder(ord);
