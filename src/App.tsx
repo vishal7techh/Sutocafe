@@ -42,24 +42,22 @@ export default function App() {
     );
   }
 
-  if (view === "admin") {
-    if (!authed) {
-      return <AdminLoginPage onLoginSuccess={() => setAuthed(true)} />;
-    }
-    return (
-      <AdminDashboardPage
-        onLogout={() => setAuthed(false)}
-        onOpenQRCodes={() => setView("qr")}
-      />
-    );
-  }
-
-  // Customer Menu view
-  if (table !== null) {
+  // If table QR code is scanned (valid table number in URL), show Customer Menu directly
+  if (table !== null && view !== "admin") {
     return <MenuPage table={table} />;
   }
 
-  // Shown when table number is missing or out of range (?table=0, ?table=99, no query param)
-  return <InvalidTable onPickForTesting={(n) => setDemoTable(n)} />;
+  // Otherwise (no table QR scanned or /admin route), directly show Admin Login / Dashboard
+  if (!authed) {
+    return <AdminLoginPage onLoginSuccess={() => setAuthed(true)} />;
+  }
+
+  return (
+    <AdminDashboardPage
+      onLogout={() => setAuthed(false)}
+      onOpenQRCodes={() => setView("qr")}
+    />
+  );
 }
+
 
