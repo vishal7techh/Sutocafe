@@ -10,6 +10,7 @@ import { OrderConfirmation } from "../components/OrderConfirmation";
 import { CustomerBottomNav, CustomerTab } from "../components/customer/CustomerBottomNav";
 import { OrdersPage } from "./OrdersPage";
 import { AccountPage } from "./AccountPage";
+import { RewardsPage } from "./RewardsPage";
 import { CustomerReadyModal } from "../components/customer/CustomerReadyModal";
 import { useCart } from "../hooks/useCart";
 import { useMenuData } from "../hooks/useMenuData";
@@ -22,7 +23,7 @@ export function MenuPage({ table }: { table: number }) {
   const { categories, menuItems, loading } = useMenuData();
   const { cart, lines, totalItems, subtotal, increment, decrement, clear } = useCart(menuItems, table);
 
-  // Active navigation tab ("menu" | "orders" | "account")
+  // Active navigation tab ("menu" | "orders" | "account" | "rewards")
   const [activeTab, setActiveTab] = useState<CustomerTab>("menu");
   const [activeCategoryId, setActiveCategoryId] = useState<string>("");
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep | "none">("none");
@@ -131,6 +132,11 @@ export function MenuPage({ table }: { table: number }) {
     setCustomerInfo(info);
     saveLocalCustomerProfile(info);
     setCheckoutStep("review");
+  };
+
+  const handleSaveCustomerInfoDirect = (info: CustomerInfo) => {
+    setCustomerInfo(info);
+    saveLocalCustomerProfile(info);
   };
 
   const handleSendWhatsAppOrder = async () => {
@@ -265,8 +271,20 @@ export function MenuPage({ table }: { table: number }) {
           tableNumber={table}
           onGoToMenu={() => setActiveTab("menu")}
           onGoToOrders={() => setActiveTab("orders")}
+          onGoToRewards={() => setActiveTab("rewards")}
         />
       )}
+
+      {activeTab === "rewards" && (
+        <RewardsPage
+          customerInfo={customerInfo || getLocalCustomerProfile()}
+          tableNumber={table}
+          onGoToMenu={() => setActiveTab("menu")}
+          onGoToOrders={() => setActiveTab("orders")}
+          onSaveCustomerInfo={handleSaveCustomerInfoDirect}
+        />
+      )}
+
 
       {/* Floating Cart Bar */}
       <CartBar

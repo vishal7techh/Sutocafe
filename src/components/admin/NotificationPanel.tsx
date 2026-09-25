@@ -2,7 +2,7 @@ import { cafeConfig } from "../../data/cafeConfig";
 
 export interface AdminNotification {
   id: string;
-  type: "new_order" | "status_change";
+  type: "new_order" | "status_change" | "reward_request";
   orderId: string;
   tableNumber: number;
   customerName: string;
@@ -10,6 +10,8 @@ export interface AdminNotification {
   itemsCount: number;
   oldStatus?: string;
   newStatus?: string;
+  visitNumber?: number;
+  activityType?: string;
   timestamp: string;
   createdAt: number;
   isUnread: boolean;
@@ -21,6 +23,7 @@ interface Props {
   onClearAll: () => void;
   onClearNotification?: (id: string) => void;
   onSelectOrder: (orderId: string) => void;
+  onSelectRewardTab?: () => void;
 }
 
 export function NotificationPanel({
@@ -29,6 +32,7 @@ export function NotificationPanel({
   onClearAll,
   onClearNotification,
   onSelectOrder,
+  onSelectRewardTab,
 }: Props) {
   return (
     <>
@@ -73,19 +77,25 @@ export function NotificationPanel({
           {notifications.length === 0 ? (
             <div className="py-16 text-center text-xs font-semibold text-slate-400">
               <div className="mx-auto mb-2 text-3xl">🔕</div>
-              No notifications yet. New orders and status changes will appear here.
+              No notifications yet. New orders, reward requests, and status changes will appear here.
             </div>
           ) : (
             notifications.map((n) => (
               <div
                 key={n.id}
                 onClick={() => {
-                  onSelectOrder(n.orderId);
+                  if (n.type === "reward_request" && onSelectRewardTab) {
+                    onSelectRewardTab();
+                  } else {
+                    onSelectOrder(n.orderId);
+                  }
                   onClose();
                 }}
                 className={`cursor-pointer rounded-2xl border p-4 transition-all hover:shadow-md ${
                   n.type === "new_order"
                     ? "border-amber-200 bg-amber-50/60 hover:bg-amber-50"
+                    : n.type === "reward_request"
+                    ? "border-purple-200 bg-purple-50/60 hover:bg-purple-50"
                     : "border-blue-200 bg-blue-50/50 hover:bg-blue-50"
                 }`}
               >
@@ -94,6 +104,10 @@ export function NotificationPanel({
                     {n.type === "new_order" ? (
                       <span className="rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white uppercase">
                         🔴 NEW ORDER
+                      </span>
+                    ) : n.type === "reward_request" ? (
+                      <span className="rounded-md bg-purple-600 px-2 py-0.5 text-[10px] font-black text-white uppercase">
+                        🎁 REWARD REQUEST
                       </span>
                     ) : (
                       <span className="rounded-md bg-blueink px-2 py-0.5 text-[10px] font-black text-white uppercase">
@@ -137,6 +151,18 @@ export function NotificationPanel({
                         </span>
                       </div>
                     </div>
+                  ) : n.type === "reward_request" ? (
+                    <div>
+                      <div className="font-bold text-purple-900">
+                        {n.customerName} — Visit {n.visitNumber || 1} Verification
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-600">
+                        Activity: <strong>{n.activityType?.replace(/_/g, " ")}</strong>
+                      </div>
+                      <div className="mt-1 text-[10px] font-bold text-purple-700 hover:underline">
+                        Tap to View & Verify Request →
+                      </div>
+                    </div>
                   ) : (
                     <div>
                       <div className="font-semibold text-slate-800">
@@ -162,3 +188,4 @@ export function NotificationPanel({
     </>
   );
 }
+

@@ -57,14 +57,98 @@ CREATE TABLE IF NOT EXISTS public.order_items (
   subtotal DECIMAL(10, 2) NOT NULL
 );
 
--- 6. ENABLE ROW LEVEL SECURITY
+-- 6. REWARDS SYSTEM TABLES
+CREATE TABLE IF NOT EXISTS public.rewards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL DEFAULT 'Free Thick Cold Coffee',
+  description TEXT DEFAULT 'Get one free Thick Cold Coffee after completing 5 verified visits.',
+  required_visits INT NOT NULL DEFAULT 5,
+  expiry_date TIMESTAMPTZ DEFAULT '2026-12-31 23:59:59+05:30',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.reward_activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reward_id UUID REFERENCES public.rewards(id) ON DELETE CASCADE,
+  visit_number INT NOT NULL,
+  activity_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  external_url TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT reward_activities_reward_visit_key UNIQUE (reward_id, visit_number)
+);
+
+CREATE TABLE IF NOT EXISTS public.customer_rewards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_phone TEXT NOT NULL UNIQUE,
+  customer_name TEXT,
+  reward_id UUID REFERENCES public.rewards(id) ON DELETE SET NULL,
+  current_visit_count INT DEFAULT 0,
+  current_stamp_count INT DEFAULT 0,
+  cycle_number INT DEFAULT 1,
+  status TEXT DEFAULT 'ACTIVE',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.reward_verification_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_phone TEXT NOT NULL,
+  customer_name TEXT,
+  reward_id UUID REFERENCES public.rewards(id) ON DELETE SET NULL,
+  order_id TEXT,
+  visit_number INT NOT NULL,
+  cycle_number INT NOT NULL DEFAULT 1,
+  activity_type TEXT NOT NULL,
+  request_status TEXT DEFAULT 'PENDING',
+  rejection_reason TEXT,
+  submitted_at TIMESTAMPTZ DEFAULT NOW(),
+  verified_at TIMESTAMPTZ,
+  verified_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.reward_stamp_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_phone TEXT NOT NULL,
+  reward_id UUID REFERENCES public.rewards(id) ON DELETE SET NULL,
+  order_id TEXT,
+  request_id UUID REFERENCES public.reward_verification_requests(id) ON DELETE SET NULL,
+  visit_number INT NOT NULL,
+  stamp_number INT NOT NULL,
+  cycle_number INT NOT NULL DEFAULT 1,
+  action TEXT NOT NULL DEFAULT 'STAMP_AWARDED',
+  approved_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.reward_redemptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_phone TEXT NOT NULL,
+  reward_id UUID REFERENCES public.rewards(id) ON DELETE SET NULL,
+  cycle_number INT NOT NULL DEFAULT 1,
+  redeemed_at TIMESTAMPTZ DEFAULT NOW(),
+  redeemed_by TEXT
+);
+
+-- 7. ENABLE ROW LEVEL SECURITY FOR ALL TABLES
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rewards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customer_rewards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_verification_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_stamp_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_redemptions ENABLE ROW LEVEL SECURITY;
 
--- 7. REMOVE OLD POLICIES
+-- 8. DROP ALL EXISTING POLICIES (TO PREVENT DUPLICATE POLICY ERRORS ON RE-RUN)
 DROP POLICY IF EXISTS "Allow public read access to categories" ON public.categories;
 DROP POLICY IF EXISTS "Allow public read access to menu items" ON public.menu_items;
 DROP POLICY IF EXISTS "Allow public read access to tables" ON public.tables;
@@ -72,41 +156,76 @@ DROP POLICY IF EXISTS "Allow public read access to orders" ON public.orders;
 DROP POLICY IF EXISTS "Allow public read access to order items" ON public.order_items;
 DROP POLICY IF EXISTS "Allow public insert of orders" ON public.orders;
 DROP POLICY IF EXISTS "Allow public insert of order items" ON public.order_items;
+DROP POLICY IF EXISTS "Allow insert menu items" ON public.menu_items;
+DROP POLICY IF EXISTS "Allow insert categories" ON public.categories;
 DROP POLICY IF EXISTS "Allow update tables status" ON public.tables;
 DROP POLICY IF EXISTS "Allow update orders status" ON public.orders;
+DROP POLICY IF EXISTS "Allow update menu items" ON public.menu_items;
+DROP POLICY IF EXISTS "Allow update categories" ON public.categories;
+DROP POLICY IF EXISTS "Allow delete orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow delete order items" ON public.order_items;
+DROP POLICY IF EXISTS "Allow delete menu items" ON public.menu_items;
+DROP POLICY IF EXISTS "Allow delete categories" ON public.categories;
 
--- 8. PUBLIC READ POLICIES
+DROP POLICY IF EXISTS "Allow public read rewards" ON public.rewards;
+DROP POLICY IF EXISTS "Allow public read reward_activities" ON public.reward_activities;
+DROP POLICY IF EXISTS "Allow public read customer_rewards" ON public.customer_rewards;
+DROP POLICY IF EXISTS "Allow public read reward_verification_requests" ON public.reward_verification_requests;
+DROP POLICY IF EXISTS "Allow public read reward_stamp_history" ON public.reward_stamp_history;
+DROP POLICY IF EXISTS "Allow public read reward_redemptions" ON public.reward_redemptions;
+DROP POLICY IF EXISTS "Allow public insert customer_rewards" ON public.customer_rewards;
+DROP POLICY IF EXISTS "Allow public insert reward_verification_requests" ON public.reward_verification_requests;
+DROP POLICY IF EXISTS "Allow public insert reward_stamp_history" ON public.reward_stamp_history;
+DROP POLICY IF EXISTS "Allow public insert reward_redemptions" ON public.reward_redemptions;
+DROP POLICY IF EXISTS "Allow update customer_rewards" ON public.customer_rewards;
+DROP POLICY IF EXISTS "Allow update reward_verification_requests" ON public.reward_verification_requests;
+DROP POLICY IF EXISTS "Allow update rewards" ON public.rewards;
+
+-- 9. CREATE ALL POLICIES
 CREATE POLICY "Allow public read access to categories" ON public.categories FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to menu items" ON public.menu_items FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to tables" ON public.tables FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to orders" ON public.orders FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to order items" ON public.order_items FOR SELECT USING (true);
 
--- 9. PUBLIC INSERT POLICIES
 CREATE POLICY "Allow public insert of orders" ON public.orders FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public insert of order items" ON public.order_items FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow insert menu items" ON public.menu_items FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow insert categories" ON public.categories FOR INSERT WITH CHECK (true);
 
--- 10. UPDATE POLICIES
 CREATE POLICY "Allow update orders status" ON public.orders FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow update tables status" ON public.tables FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow update menu items" ON public.menu_items FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow update categories" ON public.categories FOR UPDATE USING (true) WITH CHECK (true);
 
--- 11. DELETE POLICIES
 CREATE POLICY "Allow delete orders" ON public.orders FOR DELETE USING (true);
 CREATE POLICY "Allow delete order items" ON public.order_items FOR DELETE USING (true);
 CREATE POLICY "Allow delete menu items" ON public.menu_items FOR DELETE USING (true);
 CREATE POLICY "Allow delete categories" ON public.categories FOR DELETE USING (true);
 
--- 11. TABLE SEED DATA
+CREATE POLICY "Allow public read rewards" ON public.rewards FOR SELECT USING (true);
+CREATE POLICY "Allow public read reward_activities" ON public.reward_activities FOR SELECT USING (true);
+CREATE POLICY "Allow public read customer_rewards" ON public.customer_rewards FOR SELECT USING (true);
+CREATE POLICY "Allow public read reward_verification_requests" ON public.reward_verification_requests FOR SELECT USING (true);
+CREATE POLICY "Allow public read reward_stamp_history" ON public.reward_stamp_history FOR SELECT USING (true);
+CREATE POLICY "Allow public read reward_redemptions" ON public.reward_redemptions FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert customer_rewards" ON public.customer_rewards FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public insert reward_verification_requests" ON public.reward_verification_requests FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public insert reward_stamp_history" ON public.reward_stamp_history FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public insert reward_redemptions" ON public.reward_redemptions FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow update customer_rewards" ON public.customer_rewards FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update reward_verification_requests" ON public.reward_verification_requests FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update rewards" ON public.rewards FOR UPDATE USING (true) WITH CHECK (true);
+
+-- 10. TABLE SEED DATA
 INSERT INTO public.tables (table_number, status) VALUES
   (1, 'Available'), (2, 'Available'), (3, 'Available'), (4, 'Available'), (5, 'Available'),
   (6, 'Available'), (7, 'Available'), (8, 'Available'), (9, 'Available'), (10, 'Available')
 ON CONFLICT (table_number) DO NOTHING;
 
--- 12. CATEGORY & MENU SEED DATA (FULL SUTO CAFE MENU)
+-- 11. CATEGORY & MENU SEED DATA (FULL SUTO CAFE MENU)
 DELETE FROM public.order_items;
 DELETE FROM public.menu_items;
 DELETE FROM public.categories;
@@ -226,3 +345,51 @@ INSERT INTO public.menu_items (category_id, name, description, price, is_veg, is
   -- DESSERT
   ('c1400000-0000-0000-0000-000000000014', 'Brownie Burst', 'Rich fudgy chocolate brownie', 89.00, true, true),
   ('c1400000-0000-0000-0000-000000000014', 'Brownie Burst with Icecream', 'Warm brownie topped with ice cream', 119.00, true, true);
+
+-- 12. DEFAULT REWARD & ACTIVITIES SEED DATA (VALID HEX UUID: 01000000-0000-0000-0000-000000000001)
+INSERT INTO public.rewards (id, name, description, required_visits, expiry_date, is_active)
+VALUES (
+  '01000000-0000-0000-0000-000000000001',
+  'Free Thick Cold Coffee',
+  'Get one free Thick Cold Coffee after completing 5 verified visits.',
+  5,
+  '2026-12-31 23:59:59+05:30',
+  true
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.reward_activities (reward_id, visit_number, activity_type, title, description, external_url)
+VALUES
+  (
+    '01000000-0000-0000-0000-000000000001',
+    1,
+    'GOOGLE_REVIEW',
+    'Review SUTO CAFE on Google',
+    'Complete your food order, tap the button to leave a Google Review, then request verification.',
+    'https://share.google/HSgxbWEc0vuncBI9U'
+  ),
+  (
+    '01000000-0000-0000-0000-000000000001',
+    2,
+    'INSTAGRAM_FOLLOW',
+    'Follow SUTO CAFE on Instagram',
+    'Follow @sutocafe_nagpur on Instagram and request verification.',
+    'https://www.instagram.com/sutocafe_nagpur/'
+  ),
+  (
+    '01000000-0000-0000-0000-000000000001',
+    3,
+    'INSTAGRAM_STORY',
+    'Instagram Story Challenge',
+    'Post an Instagram Story, tag @sutocafe_nagpur, and request verification.',
+    'https://www.instagram.com/sutocafe_nagpur/'
+  ),
+  (
+    '01000000-0000-0000-0000-000000000001',
+    4,
+    'VISIT_VERIFICATION',
+    'Keep Visiting SUTO CAFE',
+    'Complete your order during this visit and request your reward stamp.',
+    NULL
+  )
+ON CONFLICT (reward_id, visit_number) DO NOTHING;

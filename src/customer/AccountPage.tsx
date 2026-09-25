@@ -6,9 +6,10 @@ interface Props {
   tableNumber: number;
   onGoToMenu: () => void;
   onGoToOrders: () => void;
+  onGoToRewards?: () => void;
 }
 
-export function AccountPage({ customerInfo, tableNumber, onGoToMenu, onGoToOrders }: Props) {
+export function AccountPage({ customerInfo, tableNumber, onGoToMenu, onGoToOrders, onGoToRewards }: Props) {
   return (
     <div className="flex-1 px-4 pb-24 pt-4">
       {/* Header Card */}
@@ -73,21 +74,30 @@ export function AccountPage({ customerInfo, tableNumber, onGoToMenu, onGoToOrder
           <h3 className="text-xs font-bold uppercase text-slate-400 mb-3">
             Quick Actions
           </h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={onGoToMenu}
-              className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 py-3 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors"
             >
-              🍽️ Browse Menu
+              🍽️ Menu
             </button>
             <button
               onClick={onGoToOrders}
-              className="flex items-center justify-center gap-2 rounded-xl bg-blue-50 py-3 text-xs font-bold text-blueink hover:bg-blue-100 transition-colors"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 py-3 text-xs font-bold text-blueink hover:bg-blue-100 transition-colors"
             >
-              📜 View Orders
+              📜 Orders
             </button>
+            {onGoToRewards && (
+              <button
+                onClick={onGoToRewards}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-50 py-3 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors border border-amber-200"
+              >
+                🎁 Rewards
+              </button>
+            )}
           </div>
         </div>
+
 
         {/* Cafe Information */}
         <div className="rounded-2xl border border-slate-200/60 bg-slate-50 p-4 text-center text-xs text-slate-500">

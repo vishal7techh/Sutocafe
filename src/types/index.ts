@@ -45,3 +45,6 @@ export interface OrderDetails {
 }
 
 export type CheckoutStep = "cart" | "customer_info" | "review" | "confirmation";
+
+export * from "./rewards";
+

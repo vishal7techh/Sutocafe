@@ -3,7 +3,10 @@ import { cafeConfig } from "../../data/cafeConfig";
 import { fetchOrders, updateOrderStatus, deleteOrder, clearAllOrders } from "../../services/orderService";
 import { fetchMenuItems, fetchCategories, saveMenuItem, deleteMenuItem } from "../../services/menuService";
 import { logoutAdmin } from "../../services/authService";
+import { RewardsAdminTab } from "../../components/admin/RewardsAdminTab";
+import { fetchAllRewardRequests } from "../../services/rewardService";
 import type { OrderDetails, OrderStatus, MenuItem, Category } from "../../types";
+
 import { OrderDetailsModal } from "../../components/admin/OrderDetailsModal";
 import { MenuItemEditorModal } from "../../components/admin/MenuItemEditorModal";
 import { NotificationPanel, AdminNotification } from "../../components/admin/NotificationPanel";
@@ -22,7 +25,8 @@ interface Props {
   onOpenQRCodes: () => void;
 }
 
-type AdminTab = "dashboard" | "orders" | "menu" | "tables" | "history";
+type AdminTab = "dashboard" | "orders" | "menu" | "tables" | "history" | "rewards";
+
 
 const statusColors: Record<OrderStatus, { bg: string; text: string }> = {
   New: { bg: "bg-amber-100", text: "text-amber-800" },
@@ -219,10 +223,11 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
   const loadAllData = async (showLoadingSpinner = true) => {
     if (showLoadingSpinner) setLoading(true);
     try {
-      const [fetchedOrders, fetchedItems, fetchedCats] = await Promise.all([
+      const [fetchedOrders, fetchedItems, fetchedCats, fetchedReqs] = await Promise.all([
         fetchOrders(),
         fetchMenuItems(),
         fetchCategories(),
+        fetchAllRewardRequests(),
       ]);
 
       // Detect New Orders & Status Updates (Diffing Engine with Deduplication)
@@ -292,6 +297,30 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
               oldStatus: oldOrd.status || "New",
               newStatus: newOrd.status || "New",
               timestamp: timeNow,
+              createdAt: Date.now(),
+              isUnread: true,
+            });
+          }
+        }
+      });
+
+      // Detect New Reward Verification Requests
+      fetchedReqs.forEach((req) => {
+        if (req.requestStatus === "PENDING") {
+          const eventId = `reward_req_${req.id}`;
+          if (!processedEventIdsRef.current.has(eventId) && !clearedEventIdsRef.current.has(eventId)) {
+            processedEventIdsRef.current.add(eventId);
+            newNotifications.push({
+              id: `${eventId}_${Date.now()}`,
+              type: "reward_request",
+              orderId: req.orderId || "N/A",
+              tableNumber: 0,
+              customerName: req.customerName || req.customerPhone,
+              amount: 0,
+              itemsCount: 0,
+              visitNumber: req.visitNumber,
+              activityType: req.activityType,
+              timestamp: new Date(req.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               createdAt: Date.now(),
               isUnread: true,
             });
@@ -650,6 +679,15 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
           >
             📜 Order History
           </button>
+          <button
+            onClick={() => setActiveTab("rewards")}
+            className={`relative rounded-lg px-3 py-1.5 font-bold transition-colors ${
+              activeTab === "rewards" ? "bg-white text-navy" : "text-slate-300 hover:text-white"
+            }`}
+          >
+            🎁 Rewards
+          </button>
+
         </div>
       </header>
 
@@ -1132,6 +1170,11 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
                 </div>
               </div>
             )}
+
+            {/* 6. REWARDS MANAGEMENT TAB */}
+            {activeTab === "rewards" && (
+              <RewardsAdminTab onRequestUpdated={() => loadAllData(false)} />
+            )}
           </>
         )}
       </main>
@@ -1147,8 +1190,10 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
             const ord = orders.find((o) => o.orderId === orderId);
             if (ord) setSelectedOrder(ord);
           }}
+          onSelectRewardTab={() => setActiveTab("rewards")}
         />
       )}
+
 
       {/* Order Details Modal */}
       {selectedOrder && (
