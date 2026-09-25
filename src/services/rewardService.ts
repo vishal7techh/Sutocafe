@@ -386,7 +386,19 @@ export async function submitRewardVerificationRequest(params: {
   // 1. Fetch current customer profile & existing requests
   const { profile, activeRequest, allRequests } = await fetchCustomerRewardProfile(cleanPhone);
 
-  // Check if there is already a PENDING request
+  // Check active campaign requiredVisits
+  const { campaign } = await fetchActiveRewardCampaign();
+  const requiredVisits = campaign?.requiredVisits || 5;
+
+  // Check if cycle reward is already UNLOCKED or max stamps reached
+  if (profile.status === "UNLOCKED" || profile.currentStampCount >= requiredVisits) {
+    return {
+      success: false,
+      message: `Cycle ${profile.cycleNumber} reward is already unlocked! Please redeem your reward with cafe staff before starting the next cycle.`,
+    };
+  }
+
+  // Check if there is already a PENDING request in current cycle
   if (activeRequest) {
     return {
       success: false,
@@ -409,8 +421,9 @@ export async function submitRewardVerificationRequest(params: {
     };
   }
 
+  const tempId = `req_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
   const newRequest: RewardVerificationRequest = {
-    id: `req_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    id: tempId,
     customerPhone: cleanPhone,
     customerName: params.customerName || "Customer",
     rewardId: params.rewardId || DEFAULT_CAMPAIGN.id,
@@ -424,7 +437,7 @@ export async function submitRewardVerificationRequest(params: {
 
   // Save to Local Storage cache
   const localRequests = getLocalItem<RewardVerificationRequest[]>(LOCAL_REQUESTS_KEY, []);
-  setLocalItem(LOCAL_REQUESTS_KEY, [newRequest, ...localRequests]);
+  setLocalItem(LOCAL_REQUESTS_KEY, deduplicateRequests([newRequest, ...localRequests]));
 
   // Ensure Customer Rewards Profile exists locally
   const localProfiles = getLocalItem<CustomerRewardState[]>(LOCAL_CUSTOMER_REWARDS_KEY, []);
@@ -435,7 +448,7 @@ export async function submitRewardVerificationRequest(params: {
         customerPhone: cleanPhone,
         customerName: params.customerName,
         rewardId: params.rewardId || DEFAULT_CAMPAIGN.id,
-        currentVisitCount: params.visitNumber - 1,
+        currentVisitCount: Math.min(params.visitNumber - 1, requiredVisits),
         currentStampCount: profile.currentStampCount,
         cycleNumber: params.cycleNumber,
         status: "ACTIVE",
@@ -481,9 +494,13 @@ export async function submitRewardVerificationRequest(params: {
 
     if (reqErr) {
       console.error("Error inserting reward verification request into Supabase:", reqErr);
-      // Fallback: still return success locally so UI is non-blocking
     } else if (reqRows && reqRows[0]?.id) {
-      newRequest.id = reqRows[0].id;
+      const dbId = reqRows[0].id;
+      newRequest.id = dbId;
+      // Replace temporary ID in local storage with actual DB UUID
+      const currentLoc = getLocalItem<RewardVerificationRequest[]>(LOCAL_REQUESTS_KEY, []);
+      const updatedLoc = currentLoc.map((r) => (r.id === tempId ? newRequest : r));
+      setLocalItem(LOCAL_REQUESTS_KEY, deduplicateRequests(updatedLoc));
     }
 
     return { success: true, request: newRequest };
@@ -491,6 +508,32 @@ export async function submitRewardVerificationRequest(params: {
     console.error("Exception submitting reward request:", err);
     return { success: true, request: newRequest };
   }
+}
+
+// Helper to deduplicate requests array
+function deduplicateRequests(requests: RewardVerificationRequest[]): RewardVerificationRequest[] {
+  const seenPendingKeys = new Set<string>();
+  const seenIds = new Set<string>();
+  const result: RewardVerificationRequest[] = [];
+
+  const sorted = [...requests].sort((a, b) => (b.submittedAt > a.submittedAt ? 1 : -1));
+
+  for (const req of sorted) {
+    if (seenIds.has(req.id)) continue;
+    seenIds.add(req.id);
+
+    if (req.requestStatus === "PENDING") {
+      const clean = normalizePhone(req.customerPhone);
+      const key = `${clean}_c${req.cycleNumber}_v${req.visitNumber}`;
+      if (seenPendingKeys.has(key)) {
+        continue;
+      }
+      seenPendingKeys.add(key);
+    }
+    result.push(req);
+  }
+
+  return result;
 }
 
 // ============================================================
@@ -501,7 +544,7 @@ export async function fetchAllRewardRequests(): Promise<RewardVerificationReques
   const localRequests = getLocalItem<RewardVerificationRequest[]>(LOCAL_REQUESTS_KEY, []);
 
   if (!isSupabaseConfigured || !supabase) {
-    return localRequests;
+    return deduplicateRequests(localRequests);
   }
 
   try {
@@ -511,7 +554,7 @@ export async function fetchAllRewardRequests(): Promise<RewardVerificationReques
       .order("submitted_at", { ascending: false });
 
     if (error || !dbRequests) {
-      return localRequests;
+      return deduplicateRequests(localRequests);
     }
 
     const fetched: RewardVerificationRequest[] = dbRequests.map((r) => ({
@@ -530,17 +573,29 @@ export async function fetchAllRewardRequests(): Promise<RewardVerificationReques
       verifiedBy: r.verified_by,
     }));
 
+    // Filter out temporary local requests (starting with 'req_') if DB already has a matching request
+    const filteredLocal = localRequests.filter((lr) => {
+      if (!lr.id.startsWith("req_")) return true;
+      return !fetched.some(
+        (dr) =>
+          normalizePhone(dr.customerPhone) === normalizePhone(lr.customerPhone) &&
+          dr.cycleNumber === lr.cycleNumber &&
+          dr.visitNumber === lr.visitNumber
+      );
+    });
+
     // Merge with local requests
     const map = new Map<string, RewardVerificationRequest>();
-    localRequests.forEach((r) => map.set(r.id, r));
+    filteredLocal.forEach((r) => map.set(r.id, r));
     fetched.forEach((r) => map.set(r.id, r));
 
-    const merged = Array.from(map.values()).sort((a, b) => (b.submittedAt > a.submittedAt ? 1 : -1));
-    setLocalItem(LOCAL_REQUESTS_KEY, merged);
-    return merged;
+    const merged = Array.from(map.values());
+    const deduped = deduplicateRequests(merged);
+    setLocalItem(LOCAL_REQUESTS_KEY, deduped);
+    return deduped;
   } catch (err) {
     console.error("Exception fetching reward requests:", err);
-    return localRequests;
+    return deduplicateRequests(localRequests);
   }
 }
 
@@ -569,9 +624,9 @@ export async function approveRewardRequest(
   const { profile } = await fetchCustomerRewardProfile(cleanPhone);
 
 
-  // Calculate new stamp count and new visit count
-  const newStampCount = profile.currentStampCount + 1;
-  const newVisitCount = Math.max(profile.currentVisitCount, req.visitNumber);
+  // Calculate new stamp count and new visit count (capped at requiredVisits per cycle)
+  const newStampCount = Math.min(profile.currentStampCount + 1, requiredVisits);
+  const newVisitCount = Math.min(Math.max(profile.currentVisitCount, req.visitNumber), requiredVisits);
   const isUnlocked = newStampCount >= requiredVisits;
   const newStatus = isUnlocked ? "UNLOCKED" : "ACTIVE";
 
@@ -610,9 +665,25 @@ export async function approveRewardRequest(
     createdAt: nowIso,
   };
 
-  // Update local storage
-  const updatedRequests = allRequests.map((r) => (r.id === requestId ? req : r));
-  setLocalItem(LOCAL_REQUESTS_KEY, updatedRequests);
+  // Update local storage and resolve any duplicate pending requests for this visit
+  const updatedRequests = allRequests.map((r) => {
+    if (r.id === requestId) return req;
+    if (
+      r.requestStatus === "PENDING" &&
+      normalizePhone(r.customerPhone) === cleanPhone &&
+      r.cycleNumber === req.cycleNumber &&
+      r.visitNumber === req.visitNumber
+    ) {
+      return {
+        ...r,
+        requestStatus: "APPROVED" as const,
+        verifiedAt: nowIso,
+        verifiedBy: adminName,
+      };
+    }
+    return r;
+  });
+  setLocalItem(LOCAL_REQUESTS_KEY, deduplicateRequests(updatedRequests));
 
   const localProfiles = getLocalItem<CustomerRewardState[]>(LOCAL_CUSTOMER_REWARDS_KEY, []);
   const updatedProfiles = [

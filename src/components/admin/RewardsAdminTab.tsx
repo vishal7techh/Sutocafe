@@ -586,14 +586,33 @@ export function RewardsAdminTab({ onRequestUpdated }: Props) {
                   <div className="pt-2 border-t border-slate-200">
                     <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Customer Stamp History</div>
                     <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                      {searchedHistory.map((h) => (
-                        <div key={h.id} className="flex justify-between items-center text-[11px] bg-white p-2 rounded border border-slate-100">
-                          <span className="font-semibold text-slate-700">
-                            Visit {h.visitNumber} ({h.action})
-                          </span>
-                          <span className="text-slate-400 font-mono">Cycle {h.cycleNumber}</span>
-                        </div>
-                      ))}
+                      {searchedHistory.map((h) => {
+                        const dateStr = h.createdAt
+                          ? new Date(h.createdAt).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            }) +
+                            " " +
+                            new Date(h.createdAt).toLocaleTimeString("en-IN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })
+                          : "";
+
+                        return (
+                          <div key={h.id} className="flex justify-between items-center text-[11px] bg-white p-2 rounded border border-slate-100 gap-2">
+                            <span className="font-semibold text-slate-700 truncate">
+                              Visit {h.visitNumber} ({h.action})
+                            </span>
+                            <span className="text-slate-500 font-medium text-[10px] shrink-0 font-mono">
+                              {dateStr}
+                            </span>
+                            <span className="text-slate-400 font-mono text-[10px] shrink-0">Cycle {h.cycleNumber}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

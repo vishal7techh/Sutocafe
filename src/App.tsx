@@ -4,10 +4,11 @@ import { MenuPage } from "./customer/MenuPage";
 import { QRCodesPage } from "./pages/admin/QRCodesPage";
 import { AdminLoginPage } from "./pages/admin/AdminLoginPage";
 import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
+import { InvalidTable } from "./components/InvalidTable";
 import { isAuthenticated } from "./services/authService";
 
 export default function App() {
-  const { table } = useTable();
+  const { table, setDemoTable } = useTable();
   const [view, setView] = useState<"menu" | "qr" | "admin">(() => {
     const path = window.location.pathname;
     const search = window.location.search;
@@ -41,20 +42,24 @@ export default function App() {
     );
   }
 
-  // If table QR code is scanned (valid table number in URL), show Customer Menu directly
-  if (table !== null && view !== "admin") {
+  if (view === "admin") {
+    if (!authed) {
+      return <AdminLoginPage onLoginSuccess={() => setAuthed(true)} />;
+    }
+    return (
+      <AdminDashboardPage
+        onLogout={() => setAuthed(false)}
+        onOpenQRCodes={() => setView("qr")}
+      />
+    );
+  }
+
+  // Customer Menu view
+  if (table !== null) {
     return <MenuPage table={table} />;
   }
 
-  // Otherwise (no table QR scanned or /admin route), directly show Admin Login / Dashboard
-  if (!authed) {
-    return <AdminLoginPage onLoginSuccess={() => setAuthed(true)} />;
-  }
-
-  return (
-    <AdminDashboardPage
-      onLogout={() => setAuthed(false)}
-      onOpenQRCodes={() => setView("qr")}
-    />
-  );
+  // Shown when table number is missing or out of range (?table=0, ?table=99, no query param)
+  return <InvalidTable onPickForTesting={(n) => setDemoTable(n)} />;
 }
+

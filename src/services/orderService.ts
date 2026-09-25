@@ -265,7 +265,7 @@ export async function fetchCustomerOrders(phone: string): Promise<OrderDetails[]
     const { data: dbOrders, error: orderErr } = await supabase
       .from("orders")
       .select("*")
-      .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.+91${cleanPhone},customer_phone.eq.91${cleanPhone},customer_phone.eq.0${cleanPhone},customer_phone.ilike.%${cleanPhone}%`)
+      .or(`customer_phone.eq.${cleanPhone},customer_phone.eq.91${cleanPhone},customer_phone.eq.0${cleanPhone},customer_phone.ilike.%${cleanPhone}%`)
       .order("created_at", { ascending: false });
 
     if (orderErr || !dbOrders || dbOrders.length === 0) {

@@ -93,9 +93,12 @@ export function RewardsPage({
     }
   };
 
-  const currentVisitNumber = rewardProfile ? rewardProfile.currentVisitCount + 1 : 1;
-  const currentStampCount = rewardProfile ? rewardProfile.currentStampCount : 0;
   const requiredVisits = campaign ? campaign.requiredVisits : 5;
+  const currentStampCount = rewardProfile ? rewardProfile.currentStampCount : 0;
+  const isUnlocked = rewardProfile?.status === "UNLOCKED" || currentStampCount >= requiredVisits;
+  const currentVisitNumber = rewardProfile
+    ? Math.min(rewardProfile.currentVisitCount + 1, requiredVisits)
+    : 1;
 
   // Determine current activity based on visit number
   let currentActivity: RewardActivity | undefined;
@@ -127,6 +130,14 @@ export function RewardsPage({
   const handleSubmitClaim = async () => {
     if (!customerPhone || !customerInfo) {
       setClaimFeedback({ type: "error", message: "Please save your mobile number to claim rewards." });
+      return;
+    }
+
+    if (isUnlocked) {
+      setClaimFeedback({
+        type: "error",
+        message: `🎉 Cycle ${rewardProfile?.cycleNumber || 1} reward is unlocked! Please show this screen to cafe staff to redeem your reward.`,
+      });
       return;
     }
 
@@ -332,20 +343,38 @@ export function RewardsPage({
           )}
 
           {/* 4. CURRENT VISIT ACTIVITY CARD */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-blueink">
-                  YOUR CURRENT VISIT
-                </span>
-                <h2 className="font-display text-lg font-bold text-navy">
-                  Visit {currentVisitNumber} Reward Activity
-                </h2>
+          {isUnlocked ? (
+            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 shadow-sm space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🎉</span>
+                <div>
+                  <h3 className="font-display text-base font-bold text-amber-900">
+                    Cycle {rewardProfile?.cycleNumber || 1} Reward Complete!
+                  </h3>
+                  <p className="text-xs text-amber-800">
+                    You have earned all {requiredVisits} stamps for Cycle {rewardProfile?.cycleNumber || 1}.
+                  </p>
+                </div>
               </div>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-extrabold text-blueink border border-blue-200">
-                Visit {currentVisitNumber}
-              </span>
+              <div className="rounded-xl bg-white p-3 text-xs text-slate-700 font-medium border border-amber-200">
+                Show this screen to SUTO CAFE staff to redeem your free reward. Once staff marks your reward as redeemed, your next cycle will start automatically!
+              </div>
             </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blueink">
+                    YOUR CURRENT VISIT
+                  </span>
+                  <h2 className="font-display text-lg font-bold text-navy">
+                    Visit {currentVisitNumber} Reward Activity
+                  </h2>
+                </div>
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-extrabold text-blueink border border-blue-200">
+                  Visit {currentVisitNumber}
+                </span>
+              </div>
 
             {/* Visit 1: Google Review */}
             {currentVisitNumber === 1 && (
@@ -585,7 +614,8 @@ export function RewardsPage({
                 {claimFeedback.message}
               </div>
             )}
-          </div>
+              </div>
+          )}
 
           {/* 5. CUSTOMER JOURNEY TIMELINE VISUALIZATION */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
