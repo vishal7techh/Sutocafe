@@ -496,8 +496,10 @@ export function RewardsAdminTab({ onRequestUpdated }: Props) {
       return;
     }
     try {
+      const oldPhone = typeof editingCustomerProfile === "object" && editingCustomerProfile !== null ? editingCustomerProfile.customerPhone : undefined;
       const res = await saveCustomerRewardProfile({
         customerPhone: cleanPhone,
+        oldPhone,
         customerName: custEditName.trim() || "Customer",
         currentStampCount: custEditStamps,
         currentVisitCount: custEditVisits,

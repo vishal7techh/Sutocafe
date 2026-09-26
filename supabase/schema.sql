@@ -173,10 +173,24 @@ DROP POLICY IF EXISTS "Allow public read customer_rewards" ON public.customer_re
 DROP POLICY IF EXISTS "Allow public read reward_verification_requests" ON public.reward_verification_requests;
 DROP POLICY IF EXISTS "Allow public read reward_stamp_history" ON public.reward_stamp_history;
 DROP POLICY IF EXISTS "Allow public read reward_redemptions" ON public.reward_redemptions;
+DROP POLICY IF EXISTS "Allow public insert rewards" ON public.rewards;
+DROP POLICY IF EXISTS "Allow public insert reward_activities" ON public.reward_activities;
 DROP POLICY IF EXISTS "Allow public insert customer_rewards" ON public.customer_rewards;
 DROP POLICY IF EXISTS "Allow public insert reward_verification_requests" ON public.reward_verification_requests;
 DROP POLICY IF EXISTS "Allow public insert reward_stamp_history" ON public.reward_stamp_history;
 DROP POLICY IF EXISTS "Allow public insert reward_redemptions" ON public.reward_redemptions;
+DROP POLICY IF EXISTS "Allow public update rewards" ON public.rewards;
+DROP POLICY IF EXISTS "Allow public update reward_activities" ON public.reward_activities;
+DROP POLICY IF EXISTS "Allow public update customer_rewards" ON public.customer_rewards;
+DROP POLICY IF EXISTS "Allow public update reward_verification_requests" ON public.reward_verification_requests;
+DROP POLICY IF EXISTS "Allow public update reward_stamp_history" ON public.reward_stamp_history;
+DROP POLICY IF EXISTS "Allow public update reward_redemptions" ON public.reward_redemptions;
+DROP POLICY IF EXISTS "Allow public delete rewards" ON public.rewards;
+DROP POLICY IF EXISTS "Allow public delete reward_activities" ON public.reward_activities;
+DROP POLICY IF EXISTS "Allow public delete customer_rewards" ON public.customer_rewards;
+DROP POLICY IF EXISTS "Allow public delete reward_verification_requests" ON public.reward_verification_requests;
+DROP POLICY IF EXISTS "Allow public delete reward_stamp_history" ON public.reward_stamp_history;
+DROP POLICY IF EXISTS "Allow public delete reward_redemptions" ON public.reward_redemptions;
 DROP POLICY IF EXISTS "Allow update customer_rewards" ON public.customer_rewards;
 DROP POLICY IF EXISTS "Allow update reward_verification_requests" ON public.reward_verification_requests;
 DROP POLICY IF EXISTS "Allow update rewards" ON public.rewards;
@@ -203,21 +217,36 @@ CREATE POLICY "Allow delete order items" ON public.order_items FOR DELETE USING 
 CREATE POLICY "Allow delete menu items" ON public.menu_items FOR DELETE USING (true);
 CREATE POLICY "Allow delete categories" ON public.categories FOR DELETE USING (true);
 
+-- REWARDS SYSTEM POLICIES (FULL CRUD PERMISSIONS)
 CREATE POLICY "Allow public read rewards" ON public.rewards FOR SELECT USING (true);
+CREATE POLICY "Allow public insert rewards" ON public.rewards FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update rewards" ON public.rewards FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete rewards" ON public.rewards FOR DELETE USING (true);
+
 CREATE POLICY "Allow public read reward_activities" ON public.reward_activities FOR SELECT USING (true);
+CREATE POLICY "Allow public insert reward_activities" ON public.reward_activities FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update reward_activities" ON public.reward_activities FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete reward_activities" ON public.reward_activities FOR DELETE USING (true);
+
 CREATE POLICY "Allow public read customer_rewards" ON public.customer_rewards FOR SELECT USING (true);
-CREATE POLICY "Allow public read reward_verification_requests" ON public.reward_verification_requests FOR SELECT USING (true);
-CREATE POLICY "Allow public read reward_stamp_history" ON public.reward_stamp_history FOR SELECT USING (true);
-CREATE POLICY "Allow public read reward_redemptions" ON public.reward_redemptions FOR SELECT USING (true);
-
 CREATE POLICY "Allow public insert customer_rewards" ON public.customer_rewards FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public insert reward_verification_requests" ON public.reward_verification_requests FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public insert reward_stamp_history" ON public.reward_stamp_history FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public insert reward_redemptions" ON public.reward_redemptions FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update customer_rewards" ON public.customer_rewards FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete customer_rewards" ON public.customer_rewards FOR DELETE USING (true);
 
-CREATE POLICY "Allow update customer_rewards" ON public.customer_rewards FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow update reward_verification_requests" ON public.reward_verification_requests FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow update rewards" ON public.rewards FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read reward_verification_requests" ON public.reward_verification_requests FOR SELECT USING (true);
+CREATE POLICY "Allow public insert reward_verification_requests" ON public.reward_verification_requests FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update reward_verification_requests" ON public.reward_verification_requests FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete reward_verification_requests" ON public.reward_verification_requests FOR DELETE USING (true);
+
+CREATE POLICY "Allow public read reward_stamp_history" ON public.reward_stamp_history FOR SELECT USING (true);
+CREATE POLICY "Allow public insert reward_stamp_history" ON public.reward_stamp_history FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update reward_stamp_history" ON public.reward_stamp_history FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete reward_stamp_history" ON public.reward_stamp_history FOR DELETE USING (true);
+
+CREATE POLICY "Allow public read reward_redemptions" ON public.reward_redemptions FOR SELECT USING (true);
+CREATE POLICY "Allow public insert reward_redemptions" ON public.reward_redemptions FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update reward_redemptions" ON public.reward_redemptions FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete reward_redemptions" ON public.reward_redemptions FOR DELETE USING (true);
 
 -- 10. TABLE SEED DATA
 INSERT INTO public.tables (table_number, status) VALUES

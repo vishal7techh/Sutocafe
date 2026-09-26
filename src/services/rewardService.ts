@@ -153,6 +153,7 @@ export async function fetchActiveRewardCampaign(): Promise<{
       }));
     }
 
+    fetchedActivities = deduplicateActivities(fetchedActivities);
     setLocalItem(LOCAL_CAMPAIGN_KEY, fetchedCampaign);
     setLocalItem(LOCAL_ACTIVITIES_KEY, fetchedActivities);
 
@@ -161,6 +162,14 @@ export async function fetchActiveRewardCampaign(): Promise<{
     console.error("Exception fetching reward campaign:", err);
     return { campaign: localCampaign, activities: localActivities };
   }
+}
+
+export function deduplicateActivities(activities: RewardActivity[]): RewardActivity[] {
+  const map = new Map<number, RewardActivity>();
+  for (const act of activities) {
+    map.set(act.visitNumber, act);
+  }
+  return Array.from(map.values()).sort((a, b) => a.visitNumber - b.visitNumber);
 }
 
 export async function saveRewardCampaign(
@@ -177,7 +186,7 @@ export async function saveRewardCampaign(
 
   setLocalItem(LOCAL_CAMPAIGN_KEY, updatedCampaign);
   if (activities) {
-    setLocalItem(LOCAL_ACTIVITIES_KEY, activities);
+    setLocalItem(LOCAL_ACTIVITIES_KEY, deduplicateActivities(activities));
   }
 
   if (!isSupabaseConfigured || !supabase) return true;
@@ -199,7 +208,7 @@ export async function saveRewardCampaign(
 
     if (activities && activities.length > 0) {
       const dbActivities = activities.map((a) => ({
-        id: a.id.startsWith("act-") ? undefined : a.id,
+        id: a.id.startsWith("act-") || a.id.startsWith("act_") ? undefined : a.id,
         reward_id: updatedCampaign.id,
         visit_number: a.visitNumber,
         activity_type: a.activityType,
@@ -209,7 +218,7 @@ export async function saveRewardCampaign(
         is_active: a.isActive,
       }));
 
-      await supabase.from("reward_activities").upsert(dbActivities);
+      await supabase.from("reward_activities").upsert(dbActivities, { onConflict: "reward_id,visit_number" });
     }
 
     return true;
@@ -701,14 +710,28 @@ export async function approveRewardRequest(
 
   try {
     // 1. Update DB request
-    await supabase
-      .from("reward_verification_requests")
-      .update({
-        request_status: "APPROVED",
-        verified_at: nowIso,
-        verified_by: adminName,
-      })
-      .eq("id", requestId);
+    if (requestId.startsWith("req_") || requestId.startsWith("req-")) {
+      await supabase
+        .from("reward_verification_requests")
+        .update({
+          request_status: "APPROVED",
+          verified_at: nowIso,
+          verified_by: adminName,
+        })
+        .eq("customer_phone", cleanPhone)
+        .eq("visit_number", req.visitNumber)
+        .eq("cycle_number", req.cycleNumber)
+        .eq("request_status", "PENDING");
+    } else {
+      await supabase
+        .from("reward_verification_requests")
+        .update({
+          request_status: "APPROVED",
+          verified_at: nowIso,
+          verified_by: adminName,
+        })
+        .eq("id", requestId);
+    }
 
     // 2. Upsert DB profile
     await supabase.from("customer_rewards").upsert(
@@ -758,6 +781,7 @@ export async function rejectRewardRequest(
     return { success: false, message: "Reward request not found." };
   }
 
+  const cleanPhone = normalizePhone(req.customerPhone);
   const nowIso = new Date().toISOString();
   req.requestStatus = "REJECTED";
   req.rejectionReason = rejectionReason;
@@ -770,15 +794,30 @@ export async function rejectRewardRequest(
   if (!isSupabaseConfigured || !supabase) return { success: true };
 
   try {
-    await supabase
-      .from("reward_verification_requests")
-      .update({
-        request_status: "REJECTED",
-        rejection_reason: rejectionReason,
-        verified_at: nowIso,
-        verified_by: adminName,
-      })
-      .eq("id", requestId);
+    if (requestId.startsWith("req_") || requestId.startsWith("req-")) {
+      await supabase
+        .from("reward_verification_requests")
+        .update({
+          request_status: "REJECTED",
+          rejection_reason: rejectionReason,
+          verified_at: nowIso,
+          verified_by: adminName,
+        })
+        .eq("customer_phone", cleanPhone)
+        .eq("visit_number", req.visitNumber)
+        .eq("cycle_number", req.cycleNumber)
+        .eq("request_status", "PENDING");
+    } else {
+      await supabase
+        .from("reward_verification_requests")
+        .update({
+          request_status: "REJECTED",
+          rejection_reason: rejectionReason,
+          verified_at: nowIso,
+          verified_by: adminName,
+        })
+        .eq("id", requestId);
+    }
 
     return { success: true };
   } catch (err) {
@@ -946,18 +985,24 @@ export async function fetchAllCustomerProfiles(): Promise<CustomerRewardState[]>
 
 /** Create or Edit Customer Reward Profile (CRUD - Create & Update) */
 export async function saveCustomerRewardProfile(
-  profile: Partial<CustomerRewardState> & { customerPhone: string }
+  profile: Partial<CustomerRewardState> & { customerPhone: string; oldPhone?: string }
 ): Promise<{ success: boolean; message?: string; profile?: CustomerRewardState }> {
   const cleanPhone = normalizePhone(profile.customerPhone);
   if (!cleanPhone) {
     return { success: false, message: "Valid 10-digit mobile number required." };
   }
 
+  const cleanOld = profile.oldPhone ? normalizePhone(profile.oldPhone) : undefined;
+  let currentProfiles = getLocalItem<CustomerRewardState[]>(LOCAL_CUSTOMER_REWARDS_KEY, []);
+
+  if (cleanOld && cleanOld !== cleanPhone) {
+    currentProfiles = currentProfiles.filter((p) => normalizePhone(p.customerPhone) !== cleanOld);
+  }
+
+  const existing = currentProfiles.find((p) => normalizePhone(p.customerPhone) === cleanPhone);
+
   const { campaign } = await fetchActiveRewardCampaign();
   const requiredVisits = campaign.requiredVisits || 5;
-
-  const currentProfiles = getLocalItem<CustomerRewardState[]>(LOCAL_CUSTOMER_REWARDS_KEY, []);
-  const existing = currentProfiles.find((p) => normalizePhone(p.customerPhone) === cleanPhone);
 
   const updatedStampCount = profile.currentStampCount !== undefined ? profile.currentStampCount : (existing?.currentStampCount ?? 0);
   const isUnlocked = updatedStampCount >= requiredVisits || profile.status === "UNLOCKED";
@@ -987,6 +1032,10 @@ export async function saveCustomerRewardProfile(
   }
 
   try {
+    if (cleanOld && cleanOld !== cleanPhone) {
+      await supabase.from("customer_rewards").delete().or(`customer_phone.eq.${cleanOld},customer_phone.eq.+91${cleanOld}`);
+    }
+
     await supabase.from("customer_rewards").upsert(
       {
         customer_phone: cleanPhone,
@@ -1033,9 +1082,10 @@ export async function deleteCustomerRewardProfile(phone: string): Promise<boolea
   if (!isSupabaseConfigured || !supabase) return true;
 
   try {
-    await supabase.from("customer_rewards").delete().or(`customer_phone.eq.${clean},customer_phone.eq.+91${clean}`);
-    await supabase.from("reward_stamp_history").delete().or(`customer_phone.eq.${clean},customer_phone.eq.+91${clean}`);
-    await supabase.from("reward_verification_requests").delete().or(`customer_phone.eq.${clean},customer_phone.eq.+91${clean}`);
+    const phoneFilter = `customer_phone.eq.${clean},customer_phone.eq.+91${clean},customer_phone.eq.91${clean},customer_phone.eq.0${clean}`;
+    await supabase.from("customer_rewards").delete().or(phoneFilter);
+    await supabase.from("reward_stamp_history").delete().or(phoneFilter);
+    await supabase.from("reward_verification_requests").delete().or(phoneFilter);
     return true;
   } catch (err) {
     console.error("Error deleting customer profile from DB:", err);
@@ -1062,43 +1112,91 @@ export async function deleteStampHistoryItem(historyId: string): Promise<boolean
   }
 }
 
-/** Edit/Update Reward Verification Request (CRUD - Update) */
+/** Edit/Update Reward Verification Request (CRUD - Update & Create) */
 export async function updateRewardRequest(
   requestId: string,
   updates: Partial<RewardVerificationRequest>
 ): Promise<boolean> {
   const requests = getLocalItem<RewardVerificationRequest[]>(LOCAL_REQUESTS_KEY, []);
   const target = requests.find((r) => r.id === requestId);
-  if (!target) return false;
 
-  const updatedReq: RewardVerificationRequest = {
-    ...target,
-    ...updates,
-    verifiedAt: updates.verifiedAt || new Date().toISOString(),
-  };
+  let updatedReq: RewardVerificationRequest;
+  if (target) {
+    updatedReq = {
+      ...target,
+      ...updates,
+      verifiedAt: updates.verifiedAt || target.verifiedAt,
+    };
+  } else {
+    updatedReq = {
+      id: requestId,
+      customerPhone: normalizePhone(updates.customerPhone || ""),
+      customerName: updates.customerName || "Customer",
+      rewardId: updates.rewardId || DEFAULT_CAMPAIGN.id,
+      orderId: updates.orderId,
+      visitNumber: updates.visitNumber || 1,
+      cycleNumber: updates.cycleNumber || 1,
+      activityType: updates.activityType || "VISIT_VERIFICATION",
+      requestStatus: updates.requestStatus || "PENDING",
+      rejectionReason: updates.rejectionReason,
+      submittedAt: updates.submittedAt || new Date().toISOString(),
+      verifiedAt: updates.verifiedAt,
+      verifiedBy: updates.verifiedBy,
+    };
+  }
 
-  setLocalItem(
-    LOCAL_REQUESTS_KEY,
-    requests.map((r) => (r.id === requestId ? updatedReq : r))
-  );
+  const exists = requests.some((r) => r.id === requestId);
+  const updatedRequests = exists
+    ? requests.map((r) => (r.id === requestId ? updatedReq : r))
+    : [updatedReq, ...requests];
+
+  setLocalItem(LOCAL_REQUESTS_KEY, deduplicateRequests(updatedRequests));
 
   if (!isSupabaseConfigured || !supabase) return true;
 
   try {
-    await supabase
-      .from("reward_verification_requests")
-      .update({
-        customer_phone: updatedReq.customerPhone,
-        customer_name: updatedReq.customerName,
-        visit_number: updatedReq.visitNumber,
-        cycle_number: updatedReq.cycleNumber,
-        activity_type: updatedReq.activityType,
-        request_status: updatedReq.requestStatus,
-        rejection_reason: updatedReq.rejectionReason,
-        verified_at: updatedReq.verifiedAt,
-        verified_by: updatedReq.verifiedBy,
-      })
-      .eq("id", requestId);
+    const isTempId = requestId.startsWith("req_") || requestId.startsWith("req-");
+    if (isTempId && !target) {
+      const { data, error } = await supabase
+        .from("reward_verification_requests")
+        .insert({
+          customer_phone: updatedReq.customerPhone,
+          customer_name: updatedReq.customerName,
+          reward_id: updatedReq.rewardId,
+          order_id: updatedReq.orderId || null,
+          visit_number: updatedReq.visitNumber,
+          cycle_number: updatedReq.cycleNumber,
+          activity_type: updatedReq.activityType,
+          request_status: updatedReq.requestStatus,
+          rejection_reason: updatedReq.rejectionReason || null,
+          submitted_at: updatedReq.submittedAt,
+          verified_at: updatedReq.verifiedAt || null,
+          verified_by: updatedReq.verifiedBy || null,
+        })
+        .select("id");
+
+      if (!error && data && data[0]?.id) {
+        updatedReq.id = data[0].id;
+        const currentLoc = getLocalItem<RewardVerificationRequest[]>(LOCAL_REQUESTS_KEY, []);
+        const replacedLoc = currentLoc.map((r) => (r.id === requestId ? updatedReq : r));
+        setLocalItem(LOCAL_REQUESTS_KEY, deduplicateRequests(replacedLoc));
+      }
+    } else {
+      await supabase
+        .from("reward_verification_requests")
+        .update({
+          customer_phone: updatedReq.customerPhone,
+          customer_name: updatedReq.customerName,
+          visit_number: updatedReq.visitNumber,
+          cycle_number: updatedReq.cycleNumber,
+          activity_type: updatedReq.activityType,
+          request_status: updatedReq.requestStatus,
+          rejection_reason: updatedReq.rejectionReason || null,
+          verified_at: updatedReq.verifiedAt || null,
+          verified_by: updatedReq.verifiedBy || null,
+        })
+        .eq("id", requestId);
+    }
     return true;
   } catch (err) {
     console.error("Error updating reward request:", err);
@@ -1109,6 +1207,7 @@ export async function updateRewardRequest(
 /** Delete Verification Request (CRUD - Delete) */
 export async function deleteRewardRequest(requestId: string): Promise<boolean> {
   const requests = getLocalItem<RewardVerificationRequest[]>(LOCAL_REQUESTS_KEY, []);
+  const target = requests.find((r) => r.id === requestId);
   setLocalItem(
     LOCAL_REQUESTS_KEY,
     requests.filter((r) => r.id !== requestId)
@@ -1117,7 +1216,15 @@ export async function deleteRewardRequest(requestId: string): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return true;
 
   try {
-    await supabase.from("reward_verification_requests").delete().eq("id", requestId);
+    if ((requestId.startsWith("req_") || requestId.startsWith("req-")) && target) {
+      const clean = normalizePhone(target.customerPhone);
+      await supabase
+        .from("reward_verification_requests")
+        .delete()
+        .or(`id.eq.${requestId},and(customer_phone.eq.${clean},visit_number.eq.${target.visitNumber},cycle_number.eq.${target.cycleNumber})`);
+    } else {
+      await supabase.from("reward_verification_requests").delete().eq("id", requestId);
+    }
     return true;
   } catch (err) {
     console.error("Error deleting reward request:", err);
@@ -1140,19 +1247,18 @@ export async function saveRewardActivity(activity: Partial<RewardActivity>): Pro
     isActive: activity.isActive !== undefined ? activity.isActive : true,
   };
 
-  const exists = currentActs.some((a) => a.id === actId);
+  const exists = currentActs.some((a) => a.id === actId || a.visitNumber === updatedAct.visitNumber);
   const newActs = exists
-    ? currentActs.map((a) => (a.id === actId ? updatedAct : a))
+    ? currentActs.map((a) => (a.id === actId || a.visitNumber === updatedAct.visitNumber ? updatedAct : a))
     : [...currentActs, updatedAct];
 
-  newActs.sort((a, b) => a.visitNumber - b.visitNumber);
-  setLocalItem(LOCAL_ACTIVITIES_KEY, newActs);
+  const sorted = deduplicateActivities(newActs);
+  setLocalItem(LOCAL_ACTIVITIES_KEY, sorted);
 
   if (!isSupabaseConfigured || !supabase) return true;
 
   try {
-    await supabase.from("reward_activities").upsert({
-      id: actId.startsWith("act_") || actId.startsWith("act-") ? undefined : actId,
+    const dbObj: any = {
       reward_id: updatedAct.rewardId,
       visit_number: updatedAct.visitNumber,
       activity_type: updatedAct.activityType,
@@ -1160,7 +1266,12 @@ export async function saveRewardActivity(activity: Partial<RewardActivity>): Pro
       description: updatedAct.description,
       external_url: updatedAct.externalUrl || null,
       is_active: updatedAct.isActive,
-    });
+    };
+    if (actId && !actId.startsWith("act_") && !actId.startsWith("act-")) {
+      dbObj.id = actId;
+    }
+
+    await supabase.from("reward_activities").upsert(dbObj, { onConflict: "reward_id,visit_number" });
     return true;
   } catch (err) {
     console.error("Error saving reward activity:", err);
@@ -1170,13 +1281,21 @@ export async function saveRewardActivity(activity: Partial<RewardActivity>): Pro
 
 export async function deleteRewardActivity(activityId: string): Promise<boolean> {
   const currentActs = getLocalItem<RewardActivity[]>(LOCAL_ACTIVITIES_KEY, DEFAULT_ACTIVITIES);
+  const target = currentActs.find((a) => a.id === activityId);
   const filtered = currentActs.filter((a) => a.id !== activityId);
   setLocalItem(LOCAL_ACTIVITIES_KEY, filtered);
 
   if (!isSupabaseConfigured || !supabase) return true;
 
   try {
-    await supabase.from("reward_activities").delete().eq("id", activityId);
+    if (target) {
+      await supabase
+        .from("reward_activities")
+        .delete()
+        .or(`id.eq.${activityId},visit_number.eq.${target.visitNumber}`);
+    } else {
+      await supabase.from("reward_activities").delete().eq("id", activityId);
+    }
     return true;
   } catch (err) {
     console.error("Error deleting reward activity:", err);
