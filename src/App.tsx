@@ -4,11 +4,10 @@ import { MenuPage } from "./customer/MenuPage";
 import { QRCodesPage } from "./pages/admin/QRCodesPage";
 import { AdminLoginPage } from "./pages/admin/AdminLoginPage";
 import { AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
-import { InvalidTable } from "./components/InvalidTable";
 import { isAuthenticated } from "./services/authService";
 
 export default function App() {
-  const { table, setDemoTable } = useTable();
+  const { table } = useTable();
   const [view, setView] = useState<"menu" | "qr" | "admin">(() => {
     const path = window.location.pathname;
     const search = window.location.search;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   CustomerInfo,
   RewardCampaign,
@@ -14,6 +14,7 @@ import {
   normalizePhone,
 } from "../services/rewardService";
 import { fetchCustomerOrders } from "../services/orderService";
+import { getTodayDateString } from "../utils/dateUtils";
 
 interface Props {
   customerInfo?: CustomerInfo;
@@ -39,6 +40,12 @@ export function RewardsPage({
   const [allRequests, setAllRequests] = useState<RewardVerificationRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Auto-refresh state tracking for Cycle Completions & Midnight Rollover
+  const prevCycleRef = useRef<number | null>(null);
+  const prevStatusRef = useRef<string | null>(null);
+  const [cycleBanner, setCycleBanner] = useState<string | null>(null);
+  const [todayDateStr, setTodayDateStr] = useState<string>(getTodayDateString());
+
   // Phone input modal state for first time guests
   const [phoneInput, setPhoneInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -57,6 +64,22 @@ export function RewardsPage({
       if (customerPhone) {
         const { profile, activeRequest: req, stampHistory: hist, allRequests: reqs } =
           await fetchCustomerRewardProfile(customerPhone);
+
+        // Auto-refresh check: Detect cycle advancement (e.g. Cycle 1 -> Cycle 2)
+        if (
+          prevCycleRef.current !== null &&
+          profile.cycleNumber > prevCycleRef.current
+        ) {
+          console.log(`[Customer Auto-Refresh] Cycle completed! Advanced from Cycle ${prevCycleRef.current} to Cycle ${profile.cycleNumber}`);
+          setClaimFeedback(null);
+          setCycleBanner(
+            `🎉 Congratulations! Cycle ${prevCycleRef.current} is complete! You have started Cycle ${profile.cycleNumber}.`
+          );
+        }
+
+        prevCycleRef.current = profile.cycleNumber;
+        prevStatusRef.current = profile.status;
+
         setRewardProfile(profile);
         setActiveRequest(req);
         setStampHistory(hist);
@@ -76,6 +99,19 @@ export function RewardsPage({
     }, 4000);
     return () => clearInterval(interval);
   }, [loadData]);
+
+  // Midnight 12:00 AM (00:00) Auto-Reset Check
+  useEffect(() => {
+    const midnightInterval = setInterval(() => {
+      const realToday = getTodayDateString();
+      if (realToday !== todayDateStr) {
+        console.log(`[Customer Midnight Rollover] Resetting date for customer rewards: ${realToday}`);
+        setTodayDateStr(realToday);
+        loadData();
+      }
+    }, 5000);
+    return () => clearInterval(midnightInterval);
+  }, [todayDateStr, loadData]);
 
   const handleSavePhoneProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,6 +301,22 @@ export function RewardsPage({
           </div>
         </div>
       </div>
+
+      {/* Auto-Refresh Cycle Advancement Banner */}
+      {cycleBanner && (
+        <div className="mt-4 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 shadow-sm flex items-center justify-between text-xs text-emerald-900 animate-pulse">
+          <div className="flex items-center gap-2 font-bold">
+            <span>🎉</span>
+            <span>{cycleBanner}</span>
+          </div>
+          <button
+            onClick={() => setCycleBanner(null)}
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-900"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 2. Customer Phone Registration Modal/Box if Phone Not Set */}
       {!customerPhone ? (
