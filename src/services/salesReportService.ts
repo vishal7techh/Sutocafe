@@ -48,8 +48,6 @@ export function formatOrderItemsString(lines: OrderDetails["lines"]): string {
 
 /**
  * Computes half-open ISO date timestamp strings for Supabase query filtering.
- * startOfDay: YYYY-MM-DDT00:00:00.000Z
- * endOfPeriod: beginning of day after end date YYYY-MM-DDT00:00:00.000Z
  */
 function getTimestampBounds(startIso: string, endIso: string) {
   const startDate = new Date(`${startIso}T00:00:00`);
@@ -78,7 +76,6 @@ export async function fetchSalesReportData(
     startDateStr = filter.fromDate || getTodayDateString();
     endDateStr = filter.toDate || getTodayDateString();
     if (endDateStr < startDateStr) {
-      // Swap if user selected inverted dates
       const tmp = startDateStr;
       startDateStr = endDateStr;
       endDateStr = tmp;
@@ -98,7 +95,6 @@ export async function fetchSalesReportData(
     try {
       const { startTs, endTs } = getTimestampBounds(startDateStr, endDateStr);
 
-      // Fetch matching order headers directly from Supabase
       const { data: dbOrders, error: orderErr } = await supabase
         .from("orders")
         .select("*")
@@ -157,7 +153,6 @@ export async function fetchSalesReportData(
           };
         });
       } else {
-        // Fallback if query error
         const allLocal = await fetchOrders();
         ordersList = filterOrdersByDateRange(allLocal, startDateStr, endDateStr);
       }
@@ -167,19 +162,16 @@ export async function fetchSalesReportData(
       ordersList = filterOrdersByDateRange(allLocal, startDateStr, endDateStr);
     }
   } else {
-    // Offline / Local storage fallback
     const allLocal = await fetchOrders();
     ordersList = filterOrdersByDateRange(allLocal, startDateStr, endDateStr);
   }
 
-  // Sort orders chronologically (oldest to newest)
   ordersList.sort((a, b) => {
     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return timeA - timeB;
   });
 
-  // Transform into SalesReportRow objects with 1..N sequential Sr. No.
   const rows: SalesReportRow[] = ordersList.map((order, index) => {
     return {
       srNo: index + 1,
@@ -201,7 +193,6 @@ export async function fetchSalesReportData(
     };
   });
 
-  // Calculate Aggregated Metrics
   const totalOrders = rows.length;
   const eligibleRows = rows.filter((r) => r.status !== "Cancelled");
   const cancelledRows = rows.filter((r) => r.status === "Cancelled");
@@ -241,9 +232,6 @@ export async function fetchSalesReportData(
   return { rows, summary };
 }
 
-/**
- * Filters array of orders by date string YYYY-MM-DD range.
- */
 function filterOrdersByDateRange(orders: OrderDetails[], startDate: string, endDate: string): OrderDetails[] {
   return orders.filter((o) => {
     const dateStr = getOrderDateString(o);
@@ -252,10 +240,20 @@ function filterOrdersByDateRange(orders: OrderDetails[], startDate: string, endD
 }
 
 /**
- * Formats a currency amount into standard Indian Rupee format (e.g., ₹1,250.00).
+ * Formats a currency amount into standard Indian Rupee format for UI display (e.g., ₹1,250.00).
  */
 export function formatCurrency(amount: number): string {
   return `${cafeConfig.currencySymbol}${amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/**
+ * Formats currency specifically for PDF document generation using 'Rs. ' to avoid missing font glyph superscript issues in jsPDF.
+ */
+export function formatPdfCurrency(amount: number): string {
+  return `Rs. ${amount.toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -274,6 +272,14 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
     pageSetup: { paperSize: 9, orientation: "landscape" },
   });
 
+  // Set explicit column widths upfront so header text and data never clip
+  sheet.getColumn(1).width = 16; // Order Sr. No.
+  sheet.getColumn(2).width = 24; // Order ID
+  sheet.getColumn(3).width = 55; // Order Name
+  sheet.getColumn(4).width = 26; // Customer Name
+  sheet.getColumn(5).width = 28; // Customer Contact No.
+  sheet.getColumn(6).width = 20; // Total
+
   // Title Block Styling
   sheet.mergeCells("A1:F1");
   const titleCell = sheet.getCell("A1");
@@ -289,10 +295,10 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
 
   sheet.addRow([]); // Blank line
 
-  // Column Headers
+  // Column Headers Row (Row 4)
   const headers = ["Order Sr. No.", "Order ID", "Order Name", "Customer Name", "Customer Contact No.", "Total"];
   const headerRow = sheet.addRow(headers);
-  headerRow.height = 24;
+  headerRow.height = 28; // Increased height so headers fit cleanly
 
   headerRow.eachCell((cell) => {
     cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
@@ -301,10 +307,12 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
       pattern: "solid",
       fgColor: { argb: "FF0F172A" }, // Slate dark navy
     };
-    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: false };
     cell.border = {
       top: { style: "thin", color: { argb: "FFCBD5E1" } },
       bottom: { style: "medium", color: { argb: "FF0F172A" } },
+      left: { style: "thin", color: { argb: "FF334155" } },
+      right: { style: "thin", color: { argb: "FF334155" } },
     };
   });
 
@@ -318,7 +326,7 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
       formatPhoneNumber(r.customerPhone),
       r.totalAmount,
     ]);
-    dataRow.height = 22;
+    dataRow.height = 24;
 
     // Sr No (Center)
     const c1 = dataRow.getCell(1);
@@ -372,9 +380,10 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
   sheet.addRow([]); // Blank line
 
   // Summary Section Block
-  const summaryStart = sheet.addRow(["SALES REPORT SUMMARY"]).number;
-  sheet.mergeCells(`A${summaryStart}:F${summaryStart}`);
-  const sumTitle = sheet.getCell(`A${summaryStart}`);
+  const summaryRow = sheet.addRow(["SALES REPORT SUMMARY"]);
+  summaryRow.height = 24;
+  sheet.mergeCells(`A${summaryRow.number}:F${summaryRow.number}`);
+  const sumTitle = sheet.getCell(`A${summaryRow.number}`);
   sumTitle.font = { name: "Arial", size: 11, bold: true, color: { argb: "FF1E293B" } };
   sumTitle.fill = {
     type: "pattern",
@@ -384,6 +393,7 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
 
   const addSummaryRow = (label: string, val: string | number, isCurrency = false, isBold = false) => {
     const r = sheet.addRow(["", label, "", "", "", val]);
+    r.height = 22;
     sheet.mergeCells(`B${r.number}:E${r.number}`);
     const lblCell = r.getCell(2);
     lblCell.font = { name: "Arial", size: 10, bold: isBold };
@@ -406,16 +416,6 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
   addSummaryRow("Gross Order Value", summary.grossSales, true);
   addSummaryRow("Average Order Value (AOV)", summary.averageOrderValue, true);
   addSummaryRow("TOTAL NET SALES", summary.totalSales, true, true);
-
-  // Auto-fit Column Widths
-  sheet.columns = [
-    { width: 14 }, // Sr. No.
-    { width: 22 }, // Order ID
-    { width: 45 }, // Order Name
-    { width: 22 }, // Customer Name
-    { width: 22 }, // Customer Phone
-    { width: 18 }, // Total
-  ];
 
   // Write workbook buffer and save file
   const buffer = await workbook.xlsx.writeBuffer();
@@ -459,7 +459,7 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
   doc.setLineWidth(0.5);
   doc.line(14, 25, pageWidth - 14, 25);
 
-  // Table Columns & Data Mapping
+  // Table Columns & Data Mapping using formatPdfCurrency to avoid superscript '1' font encoding issues
   const tableHeaders = [
     ["Sr. No.", "Order ID", "Order Name", "Customer Name", "Customer Phone", "Total"],
   ];
@@ -470,11 +470,11 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
     r.orderName,
     r.customerName,
     r.customerPhone,
-    formatCurrency(r.totalAmount),
+    formatPdfCurrency(r.totalAmount),
   ]);
 
   if (tableData.length === 0) {
-    tableData.push(["-", "-", "No orders found for the selected date period.", "-", "-", "₹0.00"]);
+    tableData.push(["-", "-", "No orders found for the selected date period.", "-", "-", "Rs. 0.00"]);
   }
 
   autoTable(doc, {
@@ -488,7 +488,7 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
       fontStyle: "bold",
       halign: "center",
       valign: "middle",
-      fontSize: 9,
+      fontSize: 9.5,
     },
     bodyStyles: {
       fontSize: 8.5,
@@ -497,11 +497,11 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
     },
     columnStyles: {
       0: { halign: "center", cellWidth: 18 },
-      1: { halign: "center", fontStyle: "bold", cellWidth: 32 },
+      1: { halign: "center", fontStyle: "bold", cellWidth: 34 },
       2: { halign: "left", cellWidth: "auto" }, // Order Name auto width with wrapping
-      3: { halign: "left", cellWidth: 40 },
-      4: { halign: "center", cellWidth: 32 },
-      5: { halign: "right", fontStyle: "bold", cellWidth: 30 },
+      3: { halign: "left", cellWidth: 42 },
+      4: { halign: "center", cellWidth: 34 },
+      5: { halign: "right", fontStyle: "bold", cellWidth: 32 },
     },
     styles: {
       overflow: "linebreak",
@@ -519,7 +519,6 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
   // Summary Card Block on PDF
   const finalY = (doc as any).lastAutoTable?.finalY || 100;
 
-  // Add page if summary would spill over footer
   if (finalY + 45 > doc.internal.pageSize.getHeight()) {
     doc.addPage();
   }
@@ -551,13 +550,13 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
   doc.text(`Pending Orders: ${summary.pendingOrders}`, col2X, summaryTop + 22);
   doc.text(`Total Items Sold: ${summary.totalItemsSold}`, col2X, summaryTop + 29);
 
-  doc.text(`Gross Order Value: ${formatCurrency(summary.grossSales)}`, col3X, summaryTop + 15);
-  doc.text(`Average Order Value: ${formatCurrency(summary.averageOrderValue)}`, col3X, summaryTop + 22);
+  doc.text(`Gross Order Value: ${formatPdfCurrency(summary.grossSales)}`, col3X, summaryTop + 15);
+  doc.text(`Average Order Value: ${formatPdfCurrency(summary.averageOrderValue)}`, col3X, summaryTop + 22);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(16, 185, 129); // Emerald 600
-  doc.text(`TOTAL NET SALES: ${formatCurrency(summary.totalSales)}`, col3X, summaryTop + 30);
+  doc.text(`TOTAL NET SALES: ${formatPdfCurrency(summary.totalSales)}`, col3X, summaryTop + 30);
 
   // Trigger browser download
   const dateNameStr = summary.periodLabel.replace(/[\s,]+/g, "_");
