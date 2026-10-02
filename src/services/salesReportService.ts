@@ -36,14 +36,17 @@ function formatPhoneNumber(phone: string): string {
 }
 
 /**
- * Converts OrderDetails lines into a formatted multi-item display string.
- * Example: "Veg Burger × 2, Cold Coffee × 1, French Fries × 1"
+ * Converts OrderDetails lines into a bulleted multi-line string (one item per line).
+ * Example:
+ * • Veg Burger × 2
+ * • Cold Coffee × 1
+ * • French Fries × 1
  */
 export function formatOrderItemsString(lines: OrderDetails["lines"]): string {
   if (!lines || lines.length === 0) {
     return "[No Item Details Recorded]";
   }
-  return lines.map((l) => `${l.item.name || "Item"} × ${l.quantity}`).join(", ");
+  return lines.map((l) => `• ${l.item?.name || "Item"} × ${l.quantity}`).join("\n");
 }
 
 /**
@@ -275,7 +278,7 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
   // Set explicit column widths upfront so header text and data never clip
   sheet.getColumn(1).width = 16; // Order Sr. No.
   sheet.getColumn(2).width = 24; // Order ID
-  sheet.getColumn(3).width = 55; // Order Name
+  sheet.getColumn(3).width = 52; // Order Name
   sheet.getColumn(4).width = 26; // Customer Name
   sheet.getColumn(5).width = 28; // Customer Contact No.
   sheet.getColumn(6).width = 20; // Total
@@ -298,7 +301,7 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
   // Column Headers Row (Row 4)
   const headers = ["Order Sr. No.", "Order ID", "Order Name", "Customer Name", "Customer Contact No.", "Total"];
   const headerRow = sheet.addRow(headers);
-  headerRow.height = 28; // Increased height so headers fit cleanly
+  headerRow.height = 28;
 
   headerRow.eachCell((cell) => {
     cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
@@ -316,17 +319,22 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
     };
   });
 
-  // Populate Order Rows
+  // Populate Order Rows with dynamic row height for line-by-line order items
   rows.forEach((r) => {
+    const multiLineOrderItems = r.orderName;
+    const itemCount = Math.max(1, multiLineOrderItems.split("\n").length);
+
     const dataRow = sheet.addRow([
       r.srNo,
       sanitizeFormulaInput(r.orderId),
-      r.orderName,
+      multiLineOrderItems,
       sanitizeFormulaInput(r.customerName),
       formatPhoneNumber(r.customerPhone),
       r.totalAmount,
     ]);
-    dataRow.height = 24;
+
+    // Dynamically calculate row height so multi-line item orders fit 100% without clipping (base 24pt + 18pt per line)
+    dataRow.height = Math.max(26, itemCount * 18 + 8);
 
     // Sr No (Center)
     const c1 = dataRow.getCell(1);
@@ -338,7 +346,7 @@ export async function exportToExcel(rows: SalesReportRow[], summary: SalesReport
     c2.alignment = { horizontal: "center", vertical: "middle" };
     c2.font = { name: "Arial", size: 10, bold: true };
 
-    // Order Name (Left, Wrapped)
+    // Order Name (Left, Wrapped Multi-line)
     const c3 = dataRow.getCell(3);
     c3.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
     c3.font = { name: "Arial", size: 10 };
@@ -459,7 +467,6 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
   doc.setLineWidth(0.5);
   doc.line(14, 25, pageWidth - 14, 25);
 
-  // Table Columns & Data Mapping using formatPdfCurrency to avoid superscript '1' font encoding issues
   const tableHeaders = [
     ["Sr. No.", "Order ID", "Order Name", "Customer Name", "Customer Phone", "Total"],
   ];
@@ -496,19 +503,18 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
       textColor: [30, 41, 59],
     },
     columnStyles: {
-      0: { halign: "center", cellWidth: 18 },
+      0: { halign: "center", cellWidth: 16 },
       1: { halign: "center", fontStyle: "bold", cellWidth: 34 },
-      2: { halign: "left", cellWidth: "auto" }, // Order Name auto width with wrapping
-      3: { halign: "left", cellWidth: 42 },
-      4: { halign: "center", cellWidth: 34 },
-      5: { halign: "right", fontStyle: "bold", cellWidth: 32 },
+      2: { halign: "left", cellWidth: "auto" },
+      3: { halign: "left", cellWidth: 38 },
+      4: { halign: "center", cellWidth: 32 },
+      5: { halign: "right", fontStyle: "bold", cellWidth: 30 },
     },
     styles: {
       overflow: "linebreak",
-      cellPadding: 2.5,
+      cellPadding: 3,
     },
     didDrawPage: () => {
-      // Page numbering footer
       const str = `Page ${doc.getNumberOfPages()}`;
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
@@ -516,7 +522,6 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
     },
   });
 
-  // Summary Card Block on PDF
   const finalY = (doc as any).lastAutoTable?.finalY || 100;
 
   if (finalY + 45 > doc.internal.pageSize.getHeight()) {
@@ -555,10 +560,9 @@ export async function exportToPDF(rows: SalesReportRow[], summary: SalesReportSu
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.setTextColor(16, 185, 129); // Emerald 600
+  doc.setTextColor(16, 185, 129);
   doc.text(`TOTAL NET SALES: ${formatPdfCurrency(summary.totalSales)}`, col3X, summaryTop + 30);
 
-  // Trigger browser download
   const dateNameStr = summary.periodLabel.replace(/[\s,]+/g, "_");
   doc.save(`SUTO_CAFE_Sales_Report_${dateNameStr}.pdf`);
 }

@@ -418,7 +418,7 @@ export function SalesReportTab() {
 
                       {/* Column 3: Order Name */}
                       <td className="px-4 py-3 font-medium text-slate-800">
-                        <div className="line-clamp-2 leading-relaxed">
+                        <div className="whitespace-pre-line leading-relaxed">
                           {r.orderName}
                         </div>
                         {isExpanded && r.rawLines.length > 0 && (
