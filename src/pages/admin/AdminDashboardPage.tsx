@@ -4,6 +4,7 @@ import { fetchOrders, updateOrderStatus, deleteOrder, clearAllOrders } from "../
 import { fetchMenuItems, fetchCategories, saveMenuItem, deleteMenuItem } from "../../services/menuService";
 import { logoutAdmin } from "../../services/authService";
 import { RewardsAdminTab } from "../../components/admin/RewardsAdminTab";
+import { SalesReportTab } from "../../components/admin/SalesReportTab";
 import { fetchAllRewardRequests } from "../../services/rewardService";
 import type { OrderDetails, OrderStatus, MenuItem, Category } from "../../types";
 
@@ -25,7 +26,7 @@ interface Props {
   onOpenQRCodes: () => void;
 }
 
-type AdminTab = "dashboard" | "orders" | "menu" | "tables" | "history" | "rewards";
+type AdminTab = "dashboard" | "orders" | "menu" | "tables" | "history" | "rewards" | "sales_report";
 
 
 const statusColors: Record<OrderStatus, { bg: string; text: string }> = {
@@ -687,6 +688,14 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
           >
             🎁 Rewards
           </button>
+          <button
+            onClick={() => setActiveTab("sales_report")}
+            className={`relative rounded-lg px-3 py-1.5 font-bold transition-colors ${
+              activeTab === "sales_report" ? "bg-white text-navy" : "text-slate-300 hover:text-white"
+            }`}
+          >
+            📈 Sales Report
+          </button>
 
         </div>
       </header>
@@ -1174,6 +1183,11 @@ export function AdminDashboardPage({ onLogout, onOpenQRCodes }: Props) {
             {/* 6. REWARDS MANAGEMENT TAB */}
             {activeTab === "rewards" && (
               <RewardsAdminTab onRequestUpdated={() => loadAllData(false)} />
+            )}
+
+            {/* 7. DAILY SALES REPORT TAB */}
+            {activeTab === "sales_report" && (
+              <SalesReportTab />
             )}
           </>
         )}
